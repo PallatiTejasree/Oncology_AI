@@ -1,0 +1,149 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap");
+
+.settings-page,
+.settings-page * {
+  box-sizing: border-box;
+}
+
+.settings-page {
+  --settings-navy: #09203d;
+  --settings-muted: #5d708d;
+  --settings-teal: #008c84;
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 40px 24px;
+  font-family: "Inter", sans-serif;
+  background:
+    radial-gradient(circle at 17% 16%, rgba(177, 236, 232, .32), transparent 30%),
+    radial-gradient(circle at 88% 84%, rgba(164, 231, 229, .24), transparent 28%),
+    #f6fbfc;
+}
+
+.settings-card {
+  width: min(700px, 100%);
+  padding: 42px 48px 46px;
+  border: 1px solid #deeaec;
+  border-radius: 28px;
+  background: rgba(255, 255, 255, .94);
+  box-shadow: 0 22px 55px rgba(25, 70, 83, .11);
+}
+
+.settings-header {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin-bottom: 34px;
+}
+
+.settings-header h1 {
+  margin: 0;
+  color: var(--settings-navy);
+  font-size: 34px;
+  font-weight: 800;
+  letter-spacing: -1px;
+}
+
+.settings-page .back-btn {
+  width: 46px;
+  height: 46px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 46px;
+  padding: 0;
+  border: 1px solid #d9e8ea;
+  border-radius: 14px;
+  color: var(--settings-teal);
+  font-size: 17px;
+  cursor: pointer;
+  background: #edf8f7;
+  transition: color .2s, background .2s, transform .2s;
+}
+
+.settings-page .back-btn:hover {
+  color: #fff;
+  background: var(--settings-teal);
+  transform: translateX(-2px);
+}
+
+.settings-list {
+  display: grid;
+  gap: 14px;
+}
+
+.settings-item {
+  width: 100%;
+  min-height: 68px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 17px 20px;
+  border: 1px solid #deeaec;
+  border-radius: 14px;
+  color: var(--settings-navy);
+  font: 600 15px "Inter", sans-serif;
+  cursor: pointer;
+  background: #f4f9fa;
+  transition: border-color .2s, color .2s, background .2s, transform .2s, box-shadow .2s;
+}
+
+.settings-item:hover {
+  border-color: #aad7d3;
+  color: var(--settings-teal);
+  background: #edf8f7;
+  box-shadow: 0 8px 18px rgba(25, 70, 83, .07);
+  transform: translateY(-2px);
+}
+
+.settings-item > div {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.settings-item svg {
+  flex: 0 0 auto;
+  color: var(--settings-teal);
+  font-size: 18px;
+}
+
+.settings-item > svg:last-child {
+  color: #7c929f;
+  font-size: 14px;
+}
+
+.settings-item span {
+  color: inherit;
+  font-weight: 700;
+}
+
+.settings-item.logout {
+  margin-top: 12px;
+  border-color: #dbe8ea;
+  color: var(--settings-muted);
+  background: #eef4f5;
+}
+
+.settings-item.logout:hover {
+  border-color: #aecbc9;
+  color: var(--settings-navy);
+  background: #e7f0f1;
+}
+
+.settings-item.logout svg {
+  color: var(--settings-teal);
+}
+
+@media (max-width: 700px) {
+  .settings-page { padding: 22px 15px; }
+  .settings-card { padding: 28px 20px 32px; border-radius: 22px; }
+  .settings-header { margin-bottom: 28px; }
+  .settings-header h1 { font-size: 28px; }
+  .settings-item { min-height: 62px; padding: 15px 16px; }
+}
+.settings-modal-backdrop { position:fixed; inset:0; z-index:30; display:grid; place-items:center; padding:20px; background:rgba(5,27,47,.48); backdrop-filter:blur(5px); }
+.settings-modal { width:min(460px,100%); padding:28px; border-radius:22px; background:#fff; box-shadow:0 30px 80px rgba(4,33,48,.25); }
+.settings-modal h2 { margin:0; color:#09203d; font-size:26px; }.settings-modal>p { color:#687d91; line-height:1.5; }
+.settings-modal form { display:grid; gap:15px; }.settings-modal label { display:grid; gap:7px; color:#203b55; font-size:13px; font-weight:700; }.settings-modal input { height:47px; padding:0 13px; border:1px solid #cfdee3; border-radius:11px; outline:0; font:500 15px Inter,sans-serif; }.settings-modal input:focus { border-color:#078f82; box-shadow:0 0 0 3px rgba(7,143,130,.1); }
+.settings-password-error { padding:10px 12px; border-radius:10px; color:#b42318; background:#feeceb; font-size:13px; }.settings-modal-actions { display:flex; justify-content:flex-end; gap:10px; margin-top:5px; }.settings-modal-actions button { min-height:42px; padding:0 16px; border:0; border-radius:10px; font-weight:700; cursor:pointer; }.settings-modal-actions button:first-child { color:#536b80; background:#edf3f5; }.settings-modal-actions button:last-child { color:#fff; background:#078f82; }

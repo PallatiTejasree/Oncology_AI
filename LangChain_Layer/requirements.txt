@@ -1,0 +1,15 @@
+langchain
+langchain-core
+langchain-community
+
+pypdf
+python-multipart
+
+pillow
+pytesseract
+
+chromadb
+
+google-generativeai
+
+python-dotenv

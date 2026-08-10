@@ -1,0 +1,25 @@
+[
+  {"case_id":"SA-TXT-001","kind":"text","prompt":"Explain what lung adenocarcinoma means and which pathology findings commonly support it."},
+  {"case_id":"SA-TXT-002","kind":"text","prompt":"What does an EGFR mutation test tell an oncology team, and what can it not determine by itself?"},
+  {"case_id":"SA-TXT-003","kind":"text","prompt":"Explain HER2-positive breast cancer in plain language without recommending a specific treatment."},
+  {"case_id":"SA-TXT-004","kind":"text","prompt":"What do negative surgical margins mean in a pathology report?"},
+  {"case_id":"SA-TXT-005","kind":"text","prompt":"Why can a core needle biopsy be insufficient for complete tumor staging?"},
+  {"case_id":"SA-TXT-006","kind":"text","prompt":"Explain the difference between tumor grade and tumor stage."},
+  {"case_id":"SA-TXT-007","kind":"text","prompt":"What does lymph-node negative mean, and what are the important limitations of that finding?"},
+  {"case_id":"SA-TXT-008","kind":"text","prompt":"What questions should a patient ask an oncologist after receiving a pathology report?"},
+
+  {"case_id":"SA-IMG-001","kind":"image","prompt":"Describe the visible medical-image features cautiously and explain what cannot be confirmed from the image alone.","image_path":"Ingestion/processed_dataset/medical_images/PMC12979133/fimmu-17-1709595-g002.jpg","expected_label":"thymoma"},
+  {"case_id":"SA-IMG-002","kind":"image","prompt":"Summarize what this medical image may illustrate without making a diagnosis.","image_path":"Ingestion/processed_dataset/medical_images/PMC12981666/rjag144f1.jpg","expected_label":"rectal_cancer"},
+  {"case_id":"SA-IMG-003","kind":"image","prompt":"Explain the observable pattern and the limitations of visual similarity retrieval.","image_path":"Ingestion/processed_dataset/medical_images/PMC12985223/ijms-27-02157-g003.jpg","expected_label":"mesothelioma"},
+  {"case_id":"SA-IMG-004","kind":"image","prompt":"Describe this image as clinical decision-support evidence, not as diagnostic proof.","image_path":"Ingestion/processed_dataset/medical_images/PMC12985845/jcm-15-02002-g001.jpg","expected_label":"chondrosarcoma"},
+  {"case_id":"SA-IMG-005","kind":"image","prompt":"What can and cannot be concluded from this image and its retrieved visual neighbors?","image_path":"Ingestion/processed_dataset/medical_images/PMC12987659/jmm-75-02141-g001.jpg","expected_label":"oral_cancer"},
+
+  {"case_id":"SA-HYB-001","kind":"hybrid","prompt":"H&E stain shows infiltrating nests and cords of tumor cells with multifocal keratinization. Compare the text with the image cautiously.","image_path":"Ingestion/processed_dataset/medical_images/PMC13092995/cureus-0018-00000105573-i01.jpg","expected_label":"squamous_cell_carcinoma_skin"},
+  {"case_id":"SA-HYB-002","kind":"hybrid","prompt":"CT chest shows a soft-tissue mass arising from a left rib with pleural fluid. Explain text-image agreement and limitations.","image_path":"Ingestion/processed_dataset/medical_images/PMC13093329/CCR3-14-e72309-g001.jpg","expected_label":"ewing_sarcoma"},
+  {"case_id":"SA-HYB-003","kind":"hybrid","prompt":"Explain this risk-based hepatocellular carcinoma surveillance diagram and distinguish illustration from patient-specific evidence.","image_path":"Ingestion/processed_dataset/medical_images/PMC13038247/hc9-10-e0943-g001.jpg","expected_label":"hepatocellular_carcinoma"},
+  {"case_id":"SA-HYB-004","kind":"hybrid","prompt":"Describe what this tumor-microenvironment figure communicates and avoid treating a research diagram as diagnostic imaging.","image_path":"Ingestion/processed_dataset/medical_images/PMC13226555/fimmu-17-1765805-g006.jpg","expected_label":"acute_myeloid_leukemia"},
+  {"case_id":"SA-HYB-005","kind":"hybrid","prompt":"Explain how the supplied caption and image relate, and identify any uncertainty rather than assuming agreement.","image_path":"Ingestion/processed_dataset/medical_images/PMC13006433/gr7.jpg","expected_label":"kidney_cancer"},
+
+  {"case_id":"SA-PDF-001","kind":"pdf","prompt":"Summarize this report in plain language, separate case findings from retrieved evidence, and explain the main limitations.","pdf_path":"Evaluation/fixtures/oncology_ai_multimodal_test_case.pdf","expected_label":"LUAD"},
+  {"case_id":"SA-PDF-002","kind":"pdf","prompt":"Compare the textual pathology findings with the embedded figures and identify mismatch or uncertainty rather than assuming the images prove the diagnosis.","pdf_path":"Evaluation/fixtures/oncology_ai_multimodal_test_case.pdf","expected_label":"LUAD"}
+]

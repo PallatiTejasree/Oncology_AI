@@ -1,0 +1,63 @@
+# Secrets and local environment configuration
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+
+# Python environments and caches
+venv/
+.venv/
+**/venv/
+**/.venv/
+__pycache__/
+**/__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# JavaScript dependencies and builds
+node_modules/
+**/node_modules/
+frontend/build/
+frontend/coverage/
+frontend/.git.local-backup/
+
+# User uploads and generated application data
+backend/uploads/
+tests/outputs/
+**/tests/outputs/
+Evaluation/outputs/
+Evaluation/outputs/benchmark_extracted_images/
+
+# Downloaded medical corpora and generated ML artifacts
+Dataset_Downloader/downloads/
+LangChain_Layer/sample_files/
+Ingestion/chroma_db/
+Ingestion/processed_dataset/
+# All local datasets are reproducible/downloaded artifacts. Keep only the
+# downloader/ingestion source code and small synthetic Evaluation fixtures.
+Ingestion/datasets/
+*.npy
+*.npz
+*.pt
+*.pth
+*.safetensors
+
+# Local databases, logs, and OS/editor files
+*.db
+*.sqlite
+*.sqlite3
+*.log
+.DS_Store
+**/.DS_Store
+.idea/
+.vscode/
+
+# Temporary files
+*.tmp
+*.bak
+*.backup
+*~

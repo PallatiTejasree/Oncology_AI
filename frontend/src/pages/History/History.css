@@ -1,0 +1,22 @@
+.history-page { min-height: 100vh; padding: 48px 24px; color: #09233f; background: radial-gradient(circle at 20% 10%,#d9faf6 0,transparent 30%),#f4fbfc; }
+.history-shell { max-width: 980px; margin: auto; }
+.history-header { display:flex; align-items:center; gap:18px; margin-bottom:28px; }
+.history-header p { margin:0; color:#078f82; font-size:12px; font-weight:800; letter-spacing:.12em; }
+.history-header h1 { margin:5px 0 0; font-size:38px; }
+.history-back { width:50px; height:50px; border:0; border-radius:16px; color:#07516b; background:white; box-shadow:0 8px 24px rgba(5,66,83,.1); cursor:pointer; }
+.history-list { display:grid; gap:13px; }
+.history-item { display:flex; align-items:stretch; overflow:hidden; background:white; border:1px solid #d8e8ea; border-radius:18px; box-shadow:0 10px 30px rgba(5,66,83,.06); }
+.history-open { flex:1; min-width:0; padding:18px; display:flex; align-items:center; gap:16px; text-align:left; border:0; color:inherit; background:transparent; cursor:pointer; }
+.history-open:disabled { cursor:default; }
+.history-type { flex:0 0 46px; height:46px; display:grid; place-items:center; border-radius:14px; color:white; background:linear-gradient(135deg,#064a67,#08aa96); }
+.history-copy { flex:1; min-width:0; display:grid; gap:6px; }
+.history-copy strong { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.history-copy small { color:#718598; text-transform:capitalize; }
+.history-status { padding:7px 11px; border-radius:999px; font-size:12px; font-weight:800; background:#eef3f5; }
+.status-completed { color:#06776c; background:#def7f1; }.status-failed { color:#b42318; background:#feeceb; }.status-processing { color:#966400; background:#fff4cf; }
+.history-delete { width:58px; border:0; border-left:1px solid #e4edef; color:#a53a34; background:#fffafa; cursor:pointer; }
+.history-restore { width:58px; border:0; border-left:1px solid #e4edef; color:#087f77; background:#f5fbfa; cursor:pointer; }.archive-copy { cursor:default; }.archive-copy:hover { background:transparent; }
+.history-error { margin-bottom:18px; padding:14px 18px; border-radius:12px; color:#b42318; background:#feeceb; }
+.history-empty { padding:70px 24px; text-align:center; border:1px solid #d8e8ea; border-radius:22px; background:white; color:#667c90; }
+.history-empty > svg { font-size:36px; color:#079587; }.history-empty h2 { color:#09233f; }.history-empty button { border:0; padding:12px 18px; border-radius:11px; color:white; background:#078f82; font-weight:700; cursor:pointer; }
+@media(max-width:620px){.history-page{padding:24px 14px}.history-header h1{font-size:30px}.history-status{display:none}.history-open{gap:10px}.history-delete{width:48px}}

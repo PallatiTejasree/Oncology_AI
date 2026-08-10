@@ -1,0 +1,106 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap");
+
+.profile-page, .profile-page * { box-sizing: border-box; }
+
+.profile-page {
+  --profile-navy: #09203d;
+  --profile-muted: #5d708d;
+  --profile-teal: #008c84;
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 48px 24px;
+  font-family: "Inter", sans-serif;
+  background:
+    radial-gradient(circle at 17% 16%, rgba(177,236,232,.32), transparent 30%),
+    radial-gradient(circle at 88% 84%, rgba(164,231,229,.24), transparent 28%),
+    #f6fbfc;
+}
+
+.profile-card {
+  width: min(760px, 100%);
+  padding: 42px 48px 46px;
+  border: 1px solid #deeaec;
+  border-radius: 28px;
+  background: rgba(255,255,255,.94);
+  box-shadow: 0 22px 55px rgba(25,70,83,.11);
+}
+
+.profile-header { display: flex; align-items: center; gap: 18px; margin-bottom: 34px; }
+.profile-header h1 { margin: 0; color: var(--profile-navy); font-size: 34px; font-weight: 800; letter-spacing: -1px; }
+
+.profile-page .back-btn {
+  width: 46px;
+  height: 46px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 46px;
+  padding: 0;
+  border: 1px solid #d9e8ea;
+  border-radius: 14px;
+  color: var(--profile-teal);
+  font-size: 17px;
+  cursor: pointer;
+  background: #edf8f7;
+  transition: .2s;
+}
+
+.profile-page .back-btn:hover { color: #fff; background: var(--profile-teal); transform: translateX(-2px); }
+
+.profile-avatar {
+  width: 116px;
+  height: 116px;
+  margin: 0 auto 38px;
+  display: grid;
+  place-items: center;
+  border: 6px solid #e8f7f5;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 46px;
+  font-weight: 800;
+  background: linear-gradient(135deg, #07526a, #00a697);
+  box-shadow: 0 14px 28px rgba(0,140,132,.2);
+}
+
+.profile-info { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 22px 18px; }
+.profile-field { min-width: 0; display: flex; flex-direction: column; }
+.profile-field label { display: flex; align-items: center; gap: 9px; margin-bottom: 9px; color: var(--profile-navy); font-size: 14px; font-weight: 700; }
+.profile-field label svg { color: var(--profile-teal); }
+
+.profile-field p, .profile-field input, .profile-field select {
+  width: 100%;
+  min-height: 52px;
+  margin: 0;
+  padding: 14px 16px;
+  border: 1px solid #deeaec;
+  border-radius: 12px;
+  color: #263b54;
+  font: 500 15px "Inter", sans-serif;
+  background: #f4f9fa;
+}
+
+.profile-field p { display: flex; align-items: center; overflow-wrap: anywhere; }
+.profile-field input, .profile-field select { outline: none; background: #fff; transition: .2s; }
+.profile-field input:focus, .profile-field select:focus { border-color: var(--profile-teal); box-shadow: 0 0 0 4px rgba(0,140,132,.1); }
+
+.profile-actions { margin-top: 36px; display: flex; justify-content: center; gap: 13px; }
+.edit-btn, .save-btn, .cancel-btn { min-height: 48px; display: flex; align-items: center; justify-content: center; gap: 9px; padding: 12px 26px; border: 0; border-radius: 12px; font: 700 14px "Inter", sans-serif; cursor: pointer; transition: .2s; }
+.edit-btn, .save-btn { color: #fff; background: linear-gradient(110deg, #07526a, #00a697); box-shadow: 0 10px 22px rgba(0,140,132,.2); }
+.edit-btn:hover, .save-btn:hover { transform: translateY(-2px); box-shadow: 0 13px 26px rgba(0,140,132,.27); }
+.save-btn:disabled { opacity: .65; cursor: wait; transform: none; }
+.cancel-btn { border: 1px solid #cfdee3; color: var(--profile-muted); background: #eef4f5; }
+.cancel-btn:hover { color: var(--profile-navy); background: #e4edef; }
+
+.profile-loading { min-height: 100vh; display: grid; place-items: center; color: #09203d; font: 700 18px "Inter", sans-serif; background: #f6fbfc; }
+
+@media (max-width: 700px) {
+  .profile-page { padding: 22px 15px; }
+  .profile-card { padding: 28px 20px 32px; border-radius: 22px; }
+  .profile-header { margin-bottom: 28px; }
+  .profile-header h1 { font-size: 28px; }
+  .profile-avatar { width: 94px; height: 94px; font-size: 37px; }
+  .profile-info { grid-template-columns: 1fr; }
+  .profile-actions { flex-direction: column; }
+  .edit-btn, .save-btn, .cancel-btn { width: 100%; }
+}
