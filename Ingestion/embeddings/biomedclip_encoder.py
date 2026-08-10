@@ -147,7 +147,7 @@ def load_model(device: str):
         import open_clip
     except ImportError as error:
         raise RuntimeError(
-            "open_clip is not installed. Run `pip install -r Ingestion/requirements.txt`."
+            "open_clip is not installed. Run `pip install -r requirements.txt`."
         ) from error
 
     model, preprocess = open_clip.create_model_from_pretrained(MODEL_ID)

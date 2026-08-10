@@ -70,7 +70,7 @@ class BiomedCLIPQueryEncoder:
             import open_clip
         except ImportError as error:
             raise RuntimeError(
-                "open_clip is missing. Run `pip install -r Ingestion/requirements.txt`."
+                "open_clip is missing. Run `pip install -r requirements.txt`."
             ) from error
         import torch
 
