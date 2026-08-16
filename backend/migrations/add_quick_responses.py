@@ -6,6 +6,12 @@ from app.db.database import engine
 
 
 RESPONSES = {
+    "upload_mismatch": {
+        "__upload_mismatch__": (
+            "Oops! It looks like the uploaded documents belong to different patients or cases. "
+            "Please check your files and upload the matching report and image together."
+        ),
+    },
     "greeting": {
         "hi": "Hello! How can I help you with your oncology report or medical image today?",
         "hello": "Hello! How can I help you with your oncology report or medical image today?",
@@ -34,6 +40,20 @@ RESPONSES = {
         "what can you do": "I can summarize oncology reports, review uploaded medical images, retrieve similar evidence, and answer follow-up questions. Upload a PDF or image, or type your clinical question to begin.",
         "how can you help": "I can summarize oncology reports, review uploaded medical images, retrieve similar evidence, and answer follow-up questions. Upload a PDF or image, or type your clinical question to begin.",
         "what do you do": "I can summarize oncology reports, review uploaded medical images, retrieve similar evidence, and answer follow-up questions. Upload a PDF or image, or type your clinical question to begin.",
+    },
+    "product_help": {
+        "can i see my previous analyses": (
+            "Yes. Open History from the application menu to review completed analyses. "
+            "Archived conversations are available separately in Archive."
+        ),
+        "can i delete an analysis": (
+            "Yes. Open the analysis menu and choose Delete. Deletion permanently removes "
+            "the conversation, uploaded files, and its private vectors, so review the confirmation carefully."
+        ),
+        "what is a retrieval score": (
+            "A retrieval score is a ranking signal used to order similar indexed evidence. "
+            "It is not a cancer probability, diagnostic confidence, or clinically calibrated measurement."
+        ),
     },
     "thanks": {
         "thanks": "You're welcome! Let me know if you would like help with another report, image, or clinical question.",

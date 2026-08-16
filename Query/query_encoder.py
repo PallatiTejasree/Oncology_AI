@@ -14,12 +14,16 @@ from Query.config import (
     TEXT_QUERY_MODEL,
     select_device,
 )
+from Query.query_preprocessing import preprocess_query_text
 
 
 def _validate_text(value: str, name: str = "query") -> str:
-    if not isinstance(value, str) or not value.strip():
-        raise ValueError(f"{name} cannot be empty")
-    return value.strip()
+    try:
+        return preprocess_query_text(value)
+    except ValueError as error:
+        if "empty" in str(error):
+            raise ValueError(f"{name} cannot be empty") from error
+        raise
 
 
 class MedCPTQueryEncoder:

@@ -8,7 +8,8 @@ from pydantic import BaseModel, EmailStr, Field
 # -----------------------------
 class UserRegister(BaseModel):
     email: EmailStr
-    password: str = Field(..., min_length=6)
+    password: str = Field(..., min_length=8, max_length=128)
+    recovery_pin: str = Field(pattern=r"^(?:\d{4}|\d{6})$")
 
 
 # -----------------------------
@@ -24,12 +25,22 @@ class UserLogin(BaseModel):
 # -----------------------------
 class ForgotPassword(BaseModel):
     email: EmailStr
-    new_password: str = Field(..., min_length=6)
+    recovery_pin: str = Field(pattern=r"^(?:\d{4}|\d{6})$")
+    new_password: str = Field(..., min_length=8, max_length=128)
+
+
+class ForgotEmail(BaseModel):
+    recovery_pin: str = Field(pattern=r"^(?:\d{4}|\d{6})$")
 
 
 class ChangePassword(BaseModel):
     old_password: str = Field(..., min_length=1)
     new_password: str = Field(..., min_length=8, max_length=128)
+
+
+class ChangeRecoveryPin(BaseModel):
+    current_password: str = Field(..., min_length=1, max_length=128)
+    new_recovery_pin: str = Field(pattern=r"^(?:\d{4}|\d{6})$")
 
 
 # -----------------------------

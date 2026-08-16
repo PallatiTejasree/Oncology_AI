@@ -136,16 +136,22 @@
   margin-bottom: 16px;
 }
 
-.login-stat-icon {
-  width: 30px;
-  color: #058e8c;
-  font-size: 28px;
+.login-stat-emoji {
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  display: grid;
+  place-items: center;
+  border-radius: 11px;
+  background: #e8f8f6;
+  font-size: 21px;
+  box-shadow: inset 0 0 0 1px rgba(6, 143, 139, .08);
 }
 
 .login-stat-heading strong {
-  font-size: 35px;
+  font-size: clamp(25px, 2vw, 33px);
   line-height: 1;
-  letter-spacing: -1.5px;
+  letter-spacing: -1.1px;
   font-weight: 800;
 }
 
@@ -182,6 +188,13 @@
   font-size: 18px;
   line-height: 1.5;
 }
+
+.login-mode-switch { display:grid; grid-template-columns:1fr 1fr; gap:5px; margin:0 0 20px; padding:5px; border-radius:14px; background:#edf4f5; }
+.login-mode-switch button { height:42px; border:0; border-radius:10px; color:#687c8e; background:transparent; font:700 14px "Inter",sans-serif; cursor:pointer; }
+.login-mode-switch button.active { color:#fff; background:#078d83; box-shadow:0 7px 16px rgba(7,141,131,.2); }
+.login-recovery-links { display:flex; justify-content:flex-end; gap:16px; margin:-5px 0 25px; }
+.login-recovery-links button { padding:0; border:0; color:#087770; background:none; font:700 13px "Inter",sans-serif; cursor:pointer; }
+.login-field-help { display:block; margin-top:8px; color:#718498; font-size:12px; line-height:1.4; }
 
 .login-field {
   margin-bottom: 27px;

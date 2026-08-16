@@ -3,11 +3,12 @@ import API from "./api";
 /**
  * Upload one or more medical files
  */
-export const uploadFiles = async (email, files) => {
+export const uploadFiles = async (email, files, sessionId = null) => {
   try {
     const formData = new FormData();
 
     formData.append("email", email);
+    if (sessionId) formData.append("session_id", sessionId);
 
     files.forEach((file) => {
       formData.append("files", file);
@@ -96,7 +97,22 @@ export const restoreUploadSession = async (sessionId) => {
   return response.data;
 };
 
+export const renameUploadSession = async (sessionId, name) => {
+  const response = await API.patch(`/upload/session/${sessionId}/name`, { name });
+  return response.data;
+};
+
 export const getArchivedSessions = async () => {
   const response = await API.get("/upload/archive");
+  return response.data;
+};
+
+export const getRejectedUploads = async () => {
+  const response = await API.get("/upload/rejected");
+  return response.data;
+};
+
+export const recheckRejectedUploads = async (sessionId) => {
+  const response = await API.post(`/upload/session/${sessionId}/recheck-rejected`);
   return response.data;
 };

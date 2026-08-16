@@ -46,3 +46,13 @@ npm start
 
 See [`Evaluation/README.md`](Evaluation/README.md) for retrieval metrics,
 structured-answer checks, API acceptance tests, and performance commands.
+
+## Testing
+
+See [`TESTING.md`](TESTING.md) for the local regression suite, database and
+Chroma verification, live end-to-end checks, acceptance cases, and load tests.
+For the complete deterministic local check, run:
+
+```bash
+bash scripts/test_all.sh
+```

@@ -3,6 +3,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    Float,
     DateTime,
     ForeignKey,
 )
@@ -55,6 +56,8 @@ class MedicalImage(Base):
     height = Column(Integer, nullable=True)
     processing_status = Column(String(50), nullable=False, default="Uploaded")
     rejection_reason = Column(Text, nullable=True)
+    quality_score = Column(Float, nullable=True)
+    quality_reasons_json = Column(Text, nullable=True)
 
     created_at = Column(
         DateTime(timezone=True),

@@ -25,12 +25,18 @@ class User(Base):
         String,
         unique=True,
         nullable=False,
-        index=True,
     )
 
     password_hash = Column(
         String,
         nullable=False,
+    )
+
+    recovery_pin_hash = Column(
+        String(64),
+        nullable=True,
+        unique=True,
+        index=True,
     )
 
     full_name = Column(

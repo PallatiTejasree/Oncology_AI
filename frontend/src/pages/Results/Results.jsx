@@ -1,44 +1,70 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { FaHeartbeat } from "react-icons/fa";
-import { FaClockRotateLeft, FaFilePdf, FaGear, FaImage, FaPaperclip, FaPaperPlane, FaPlus, FaRegUser, FaXmark } from "react-icons/fa6";
+import { FaArrowRightFromBracket, FaClockRotateLeft, FaFilePdf, FaGear, FaImage, FaPaperclip, FaPaperPlane, FaPlus, FaRegUser, FaXmark } from "react-icons/fa6";
 import { analyzeSession, analyzeText, clearConversationCache } from "../../services/analysisService";
-import { deleteUploadSession, getUploadHistory, getUploadSession, uploadFiles } from "../../services/uploadService";
+import { getUploadHistory, getUploadSession, uploadFiles } from "../../services/uploadService";
 import "./Results.css";
 import oncologyLogo from "../../assets/oncology-ai-logo.png";
 
 function CareUrgency({ review }) {
   if (!review?.level) return null;
+  const indicators = {
+    emergency: { symbol: "●", label: "Red urgency indicator" },
+    prompt: { symbol: "●", label: "Yellow urgency indicator" },
+    routine: { symbol: "●", label: "Blue urgency indicator" },
+    insufficient: { symbol: "○", label: "White insufficient-information indicator" },
+  };
+  const indicator = indicators[review.level] || indicators.insufficient;
   return (
     <section className={`care-urgency urgency-${review.level}`} aria-label="Care urgency guidance">
-      <div><small>Care urgency</small><strong>{review.label}</strong></div>
+      <div>
+        <span className="urgency-dot" role="img" aria-label={indicator.label}>{indicator.symbol}</span>
+        <small>What to do next</small>
+        <strong>{review.label}</strong>
+      </div>
       <p>{review.message}</p>
-      <span>Guidance only · not a diagnosis or risk probability</span>
+      <span>Guidance only · not an emergency diagnosis or cancer-risk probability</span>
     </section>
   );
 }
 
-function RiskReview({ review }) {
-  if (!review?.rows?.length) return null;
+function CaseComplexity({ review }) {
+  if (!review?.level) return null;
+  const indicators = {
+    high: { symbol: "●", label: "Red high-complexity indicator" },
+    moderate: { symbol: "●", label: "Orange moderate-complexity indicator" },
+    lower: { symbol: "●", label: "Green lower-complexity indicator" },
+    insufficient: { symbol: "○", label: "White insufficient-information indicator" },
+  };
+  const indicator = indicators[review.level] || indicators.insufficient;
   return (
-    <section className="risk-review" aria-labelledby="risk-review-title">
-      <div className="risk-review-heading">
-        <div><h2 id="risk-review-title">Cancer risk review</h2><p>{review.explanation}</p></div>
-        <span>{review.level}</span>
+    <section className={`case-complexity complexity-${review.level}`} aria-label="Documented case complexity">
+      <div>
+        <span className="complexity-dot" role="img" aria-label={indicator.label}>{indicator.symbol}</span>
+        <small>Case complexity</small>
+        <strong>{review.label}</strong>
       </div>
-      <div className="risk-table-wrap">
-        <table>
-          <thead><tr><th>Review area</th><th>Current status</th><th>What it means</th></tr></thead>
-          <tbody>{review.rows.map((row) => <tr key={row.factor}><th scope="row">{row.factor}</th><td>{row.status}</td><td>{row.meaning}</td></tr>)}</tbody>
-        </table>
-      </div>
+      <p>{review.message}</p>
+      <span>Based on explicit report findings · not a cancer-risk percentage or diagnosis</span>
     </section>
   );
 }
 
-function ResearchSummary({ summary }) {
-  if (!summary) return null;
-  return <div className="research-summary"><span>{summary.related_records || 0}</span><p><strong>Related evidence reviewed</strong><small>{summary.message}</small></p></div>;
+export function GenerationStatus({ mode, diagnostics = {} }) {
+  if (!mode) return null;
+  const labels = {
+    gemini_structured: "AI-generated structured interpretation",
+    gemini_degraded: "AI-generated degraded interpretation",
+    extractive_fallback: "Retrieval-only fallback",
+  };
+  const quotaReached = Boolean(diagnostics.quota_exhausted);
+  return (
+    <aside className={`generation-status generation-${mode}`} role="status">
+      <strong>{labels[mode] || "Analysis result"}</strong>
+      {quotaReached && <p>AI interpretation is temporarily unavailable because the model service quota has been reached. A retrieval-only summary based on the uploaded report is shown instead.</p>}
+    </aside>
+  );
 }
 
 function EvidenceList({ evidence = [], supportingImages = [], uploadedSources = [], citationValidation }) {
@@ -130,9 +156,9 @@ function CitationTags({ citations }) {
 
 function StructuredAnswer({ answer }) {
   if (!answer) return null;
-  const findings = asObjectArray(answer.findings);
-  const reasoning = asObjectArray(answer.reasoning);
-  const supports = asArray(answer.supports).map(displayText).filter(Boolean);
+  // Gemini's richer schema uses key_findings. Keep findings only for older
+  // saved analyses and never render both sections as duplicates.
+  const findings = asObjectArray((answer.key_findings?.length ? answer.key_findings : answer.findings));
   const limitations = asArray(answer.limitations).map(displayText).filter(Boolean);
   const medicalTerms = asObjectArray(answer.medical_terms);
   const supportClass = String(answer.evidence_support?.level || "limited").toLowerCase();
@@ -157,23 +183,22 @@ function StructuredAnswer({ answer }) {
         <div className="findings-table-wrap"><table className="findings-table">
           <thead><tr><th>Finding</th><th>Result</th><th>What it means</th></tr></thead>
           <tbody>{findings.map((item, index) => <tr key={`${displayText(item.finding)}-${index}`}>
-            <th scope="row">{displayText(item.finding)}<CitationTags citations={item.citations} /></th>
+            <th scope="row">{displayText(item.title || item.finding)}<CitationTags citations={item.citations} /></th>
             <td>{displayText(item.result)}</td><td>{displayText(item.meaning)}</td>
           </tr>)}</tbody>
         </table></div>
       </section>}
 
-      {reasoning.length > 0 && <section className="answer-section">
-        <h2>Why the AI reached this interpretation</h2>
-        <ol className="reasoning-list">{reasoning.map((item, index) => <li key={`${displayText(item.title)}-${index}`}>
-          <span>{index + 1}</span><div><strong>{displayText(item.title)}</strong><p>{displayText(item.explanation)}</p><CitationTags citations={item.citations} /></div>
-        </li>)}</ol>
+      {answer.staging && (answer.staging.documented_components?.length > 0 || answer.staging.unresolved_components?.length > 0 || answer.staging.final_stage || answer.staging.explanation) && <section className="answer-section">
+        <h2>Staging</h2>
+        {answer.staging.explanation && <p>{displayText(answer.staging.explanation)}</p>}
+        {answer.staging.final_stage && <p><strong>Documented stage:</strong> {displayText(answer.staging.final_stage)}</p>}
+        <CitationTags citations={answer.staging.citations} />
       </section>}
 
-      {(supports.length > 0 || limitations.length > 0) && <section className="answer-section">
-        <h2>Evidence balance</h2><div className="evidence-balance">
-          <div><h3>Supports the interpretation</h3>{supports.map((item, index) => <p key={index}>✓ {item}</p>)}</div>
-          <div><h3>Important limitations</h3>{limitations.map((item, index) => <p key={index}>! {item}</p>)}</div>
+      {limitations.length > 0 && <section className="answer-section">
+        <h2>Important limitations</h2><div className="evidence-balance">
+          <div>{limitations.map((item, index) => <p key={index}>! {item}</p>)}</div>
         </div>
       </section>}
 
@@ -182,9 +207,28 @@ function StructuredAnswer({ answer }) {
         <div>{medicalTerms.map((item, index) => <article key={`${displayText(item.term)}-${index}`}><strong>{displayText(item.term)}</strong><p>{displayText(item.definition)}</p></article>)}</div>
       </details>}
 
-      {answer.safety_notice && <section className="answer-safety"><h2>Safety & interpretation</h2><p>{displayText(answer.safety_notice)}</p></section>}
+      {answer.safety_notice && <p className="assistant-summary">{displayText(answer.safety_notice)}</p>}
+
     </div>
   );
+}
+
+export function ResponseContent({ contract, structuredAnswer, summary }) {
+  if (contract === "general" && structuredAnswer?.answer) {
+    return <div className="conversational-answer"><p className="assistant-summary">{structuredAnswer.answer}</p><CitationTags citations={structuredAnswer.reference_citations} /></div>;
+  }
+  if (contract === "focused" && structuredAnswer?.answer) {
+    return <div className="focused-answer"><p className="assistant-summary">{structuredAnswer.answer}</p><span>{displayText(structuredAnswer.certainty)?.replaceAll("_", " ")}</span><CitationTags citations={structuredAnswer.citations} /></div>;
+  }
+  return structuredAnswer ? <StructuredAnswer answer={structuredAnswer} /> : <p className="assistant-summary">{summary}</p>;
+}
+
+export function inferResponseContract(explicitContract, structuredAnswer) {
+  if (explicitContract) return explicitContract;
+  if (structuredAnswer?.plain_language_summary || structuredAnswer?.headline || structuredAnswer?.key_findings || structuredAnswer?.findings) return "full_report";
+  if (structuredAnswer?.answer && structuredAnswer?.certainty) return "focused";
+  if (structuredAnswer?.answer) return "general";
+  return null;
 }
 
 export default function Results() {
@@ -194,12 +238,16 @@ export default function Results() {
   const pendingAnalysis = location.state?.pendingAnalysis;
   const initialPrompt = pendingAnalysis?.text ?? location.state?.prompt;
   const initialAttachments = pendingAnalysis?.attachments ?? location.state?.attachments ?? [];
+  const initialSavedMessages = location.state?.savedMessages ?? [];
+  const initialSavedAnalyses = location.state?.savedAnalyses ?? [];
   const [displayedPrompt, setDisplayedPrompt] = useState(initialPrompt || "");
   const [displayedAttachments, setDisplayedAttachments] = useState(initialAttachments);
   const [result, setResult] = useState(initial);
   const [activeSessionId, setActiveSessionId] = useState(initial?.session_id || pendingAnalysis?.sessionId || null);
   const [initialLoading, setInitialLoading] = useState(Boolean(pendingAnalysis && !initial));
-  const [turns, setTurns] = useState([]);
+  const [turns, setTurns] = useState(() => initialSavedAnalyses.length > 1
+    ? initialSavedAnalyses.slice(1).map((analysis) => ({ question: analysis.question, answer: analysis.result?.summary, responseType: analysis.result?.response_type, responseContract: analysis.result?.response_contract, structuredAnswer: analysis.result?.structured_answer, briefResponse: analysis.result?.brief_response, evidence: analysis.result?.evidence, supportingImages: analysis.result?.supporting_image_evidence, uploadedSources: analysis.result?.uploaded_sources, citationValidation: analysis.result?.citation_validation, careUrgency: analysis.result?.care_urgency, caseComplexity: analysis.result?.case_complexity, generationMode: analysis.result?.generation_mode, generationDiagnostics: analysis.result?.generation_diagnostics, fileName: analysis.attachments?.[0]?.name, fileType: analysis.attachments?.[0]?.type, fileKind: analysis.attachments?.[0]?.kind }))
+    : initialSavedMessages.slice(1).map((message) => ({ question: message.question, answer: message.answer, responseType: "conversation" })));
   const [question, setQuestion] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
@@ -221,6 +269,7 @@ export default function Results() {
           : await analyzeText(pendingAnalysis.text || "");
         setResult(next);
         setActiveSessionId(next.session_id);
+        setError("");
         navigate("/results", {
           replace: true,
           state: {
@@ -230,7 +279,24 @@ export default function Results() {
           },
         });
       } catch (requestError) {
-        setError(requestError.response?.data?.detail || requestError.message || "Analysis failed.");
+        const message = requestError.response?.data?.detail || requestError.message || "Analysis failed.";
+        const rejection = {
+          session_id: pendingAnalysis.sessionId || null,
+          response_type: "rejection",
+          query_type: "validation",
+          summary: message,
+        };
+        setResult(rejection);
+        if (pendingAnalysis.sessionId) setActiveSessionId(pendingAnalysis.sessionId);
+        setError("");
+        navigate("/results", {
+          replace: true,
+          state: {
+            result: rejection,
+            prompt: pendingAnalysis.text || "Analyze this uploaded file",
+            attachments: pendingAnalysis.attachments || [],
+          },
+        });
       } finally {
         setInitialLoading(false);
       }
@@ -241,18 +307,17 @@ export default function Results() {
   useEffect(() => {
     const email = localStorage.getItem("email");
     if (!email) return;
-    getUploadHistory(email).then((items) => setRecentAnalyses(items.slice(0, 5))).catch(() => setRecentAnalyses([]));
-  }, [turns]);
+    getUploadHistory(email).then((items) => setRecentAnalyses(items)).catch(() => setRecentAnalyses([]));
+  }, [turns, result?.session_id, result?.summary]);
 
   const attachAnotherFile = async (event) => {
     const files = Array.from(event.target.files || []);
     if (!files.length) return;
     setUploading(true); setError("");
     try {
-      const response = await uploadFiles(localStorage.getItem("email"), files);
+      const response = await uploadFiles(localStorage.getItem("email"), files, activeSessionId);
       const file = files[0];
-      setActiveSessionId(response.session_id);
-      setAttachment({ sessionId: response.session_id, name: file.name, previewUrl: file.type.startsWith("image/") ? URL.createObjectURL(file) : null });
+      setAttachment({ sessionId: response.session_id, name: file.name, type: file.type, kind: file.type.startsWith("image/") ? "image" : "report", previewUrl: file.type.startsWith("image/") ? URL.createObjectURL(file) : null });
     } catch (requestError) { setError(requestError.response?.data?.detail || "Unable to upload file."); }
     finally { setUploading(false); event.target.value = ""; }
   };
@@ -261,24 +326,50 @@ export default function Results() {
     if (!attachment) return;
     const removed = attachment;
     setAttachment(null);
-    setActiveSessionId(result.session_id);
     if (removed.previewUrl) URL.revokeObjectURL(removed.previewUrl);
-    try { await deleteUploadSession(removed.sessionId); } catch (requestError) { console.error(requestError); }
   };
 
   const openRecent = async (sessionId) => {
+    if (sessionId === activeSessionId) {
+      setError("");
+      return;
+    }
     try {
       const session = await getUploadSession(sessionId);
-      const saved = session.latest_summary?.result;
+      const messages = session.messages || [];
+      const saved = session.analyses?.[0]?.result || (session.input_type === "text" && messages.length
+        ? { response_type: "conversation", query_type: "conversation", summary: messages[0].answer }
+        : session.latest_summary?.result || (session.failure_reason ? { response_type: "rejection", query_type: "validation", summary: session.failure_reason } : null));
       if (!saved) throw new Error("This analysis is not complete.");
       setResult({ session_id: sessionId, ...saved });
       setActiveSessionId(sessionId);
-      setDisplayedPrompt(session.original_query || "Analyze this uploaded file");
-      setDisplayedAttachments([
+      setDisplayedPrompt(session.analyses?.[0]?.question || session.original_query || "Analyze this uploaded file");
+      setDisplayedAttachments(session.analyses?.[0]?.attachments || [
         ...(session.reports || []).map((file) => ({ name: file.file_name, type: file.mime_type, kind: "report" })),
         ...(session.images || []).map((file) => ({ name: file.file_name, type: file.mime_type, kind: "image" })),
       ]);
-      setTurns([]); setAttachment(null); window.scrollTo({ top: 0, behavior: "smooth" });
+      setTurns(session.analyses?.length > 1 ? session.analyses.slice(1).map((analysis) => ({
+        question: analysis.question,
+        answer: analysis.result?.summary,
+        responseType: analysis.result?.response_type,
+        responseContract: analysis.result?.response_contract,
+        structuredAnswer: analysis.result?.structured_answer,
+        briefResponse: analysis.result?.brief_response,
+        evidence: analysis.result?.evidence,
+        supportingImages: analysis.result?.supporting_image_evidence,
+        uploadedSources: analysis.result?.uploaded_sources,
+        citationValidation: analysis.result?.citation_validation,
+        careUrgency: analysis.result?.care_urgency,
+        caseComplexity: analysis.result?.case_complexity,
+        fileName: analysis.attachments?.[0]?.name,
+        fileType: analysis.attachments?.[0]?.type,
+        fileKind: analysis.attachments?.[0]?.kind,
+      })) : messages.slice(1).map((message) => ({
+        question: message.question,
+        answer: message.answer,
+        responseType: "conversation",
+      })));
+      setError(""); setAttachment(null); window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (requestError) { setError(requestError.response?.data?.detail || requestError.message); }
   };
 
@@ -299,18 +390,24 @@ export default function Results() {
     event.preventDefault();
     const clean = question.trim();
     if ((!clean && !attachment) || !activeSessionId || sending) return;
-    setQuestion(""); setError(""); setSending(true);
+    const submittedAttachment = attachment;
+    const pendingId = `${Date.now()}-${Math.random()}`;
+    const pendingTurn = { id: pendingId, question: clean || "Analyze this uploaded file", answer: null, pending: true, previewUrl: submittedAttachment?.previewUrl, fileName: submittedAttachment?.name, fileType: submittedAttachment?.type, fileKind: submittedAttachment?.kind };
+    setQuestion(""); setError(""); setAttachment(null); setSending(true);
+    setTurns((current) => [...current, pendingTurn]);
+    window.setTimeout(() => window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" }), 0);
     try {
       const next = await analyzeSession(activeSessionId, clean);
-      setTurns((current) => [...current, { question: clean || "Analyze this uploaded file", answer: next.summary, structuredAnswer: next.structured_answer, evidence: next.evidence, supportingImages: next.supporting_image_evidence, uploadedSources: next.uploaded_sources, citationValidation: next.citation_validation, careUrgency: next.care_urgency, previewUrl: attachment?.previewUrl, fileName: attachment?.name }]);
+      setTurns((current) => current.map((turn) => turn.id === pendingId ? { ...turn, pending: false, answer: next.summary, responseType: next.response_type, responseContract: next.response_contract, structuredAnswer: next.structured_answer, briefResponse: next.brief_response, evidence: next.evidence, supportingImages: next.supporting_image_evidence, uploadedSources: next.uploaded_sources, citationValidation: next.citation_validation, careUrgency: next.care_urgency, caseComplexity: next.case_complexity, generationMode: next.generation_mode, generationDiagnostics: next.generation_diagnostics } : turn));
       setResult((current) => ({ ...current, session_id: activeSessionId }));
-      setAttachment(null);
       window.setTimeout(() => window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" }), 0);
     } catch (requestError) {
-      setError(requestError.response?.data?.detail || "Unable to answer the follow-up question.");
-      setQuestion(clean);
+      const message = requestError.response?.data?.detail || "Unable to answer the follow-up question.";
+      setTurns((current) => current.map((turn) => turn.id === pendingId ? { ...turn, pending: false, answer: message, responseType: "rejection", isError: true } : turn));
     } finally { setSending(false); }
   };
+
+  const resultContract = inferResponseContract(result?.response_contract, result?.structured_answer);
 
   return (
     <div className="chat-workspace">
@@ -318,8 +415,9 @@ export default function Results() {
         <div className="chat-brand"><span><img src={oncologyLogo} alt="Oncology AI logo" /></span><div><strong>Oncology AI</strong><small>Clinical Intelligence</small></div></div>
         <button className="chat-new" onClick={() => navigate("/dashboard")}><FaPlus /> New analysis</button>
         <nav><button onClick={() => navigate("/dashboard")}><FaHeartbeat /> Assistant</button><button onClick={() => navigate("/history")}><FaClockRotateLeft /> History</button><button onClick={() => navigate("/profile")}><FaRegUser /> Profile</button><button onClick={() => navigate("/settings")}><FaGear /> Settings</button></nav>
-        <section className="chat-recents"><h2>Recents</h2>{recentAnalyses.length === 0 ? <p>No saved analyses yet.</p> : recentAnalyses.map((item) => <button key={item.session_id} onClick={() => openRecent(item.session_id)}>{item.display_title || item.session_name}</button>)}</section>
+        <section className="chat-recents"><h2>Recents</h2><div className="chat-recents-list">{recentAnalyses.length === 0 ? <p>No saved analyses yet.</p> : recentAnalyses.map((item) => <button className={item.session_id === activeSessionId ? "active" : ""} key={item.session_id} disabled={item.status !== "Completed" && item.session_id !== activeSessionId} onClick={() => openRecent(item.session_id)}>{item.display_title || item.session_name}</button>)}</div></section>
         <p className="chat-sidebar-note">Clinical decision support only</p>
+        <button className="chat-logout" onClick={() => { localStorage.clear(); navigate("/"); }}><FaArrowRightFromBracket /> Logout</button>
       </aside>
       <main className="chat-main">
         <header className="chat-topbar"><div><small>ONCOLOGY AI · CLINICAL SUPPORT</small><strong>Analysis conversation</strong></div><span className="chat-topbar-actions"><button onClick={clearContext}>Clear context</button><button onClick={() => navigate("/history")}>History</button></span></header>
@@ -330,16 +428,16 @@ export default function Results() {
               <p>{displayedPrompt || "Analyze this uploaded file"}</p>
             </div></article>
           )}
-          {initialLoading && <article className="assistant-turn compact"><div className="assistant-avatar"><FaHeartbeat /></div><div className="assistant-content"><ThinkingIndicator label="Reviewing your clinical material" /></div></article>}
+          {initialLoading && <article className="assistant-turn compact"><div className="assistant-avatar"><img src={oncologyLogo} alt="" /></div><div className="assistant-content"><ThinkingIndicator label="Reviewing your clinical material" /></div></article>}
           {result && <article className="assistant-turn">
-            <div className="assistant-avatar"><FaHeartbeat /></div>
-            <div className="assistant-content"><h1>{result.response_type === "conversation" ? "Oncology AI" : "Answer"}</h1><CareUrgency review={result.care_urgency} />{result.structured_answer ? <StructuredAnswer answer={result.structured_answer} /> : <><ResearchSummary summary={result.research_summary} /><p className="assistant-summary">{result.summary}</p></>}<details className="advanced-evidence"><summary>Show detailed evidence ({result.research_summary?.related_records || 0})</summary><EvidenceList evidence={result.evidence} supportingImages={result.supporting_image_evidence} uploadedSources={result.uploaded_sources} citationValidation={result.citation_validation} /></details>{!result.structured_answer && <RiskReview review={result.risk_review} />}{result.response_type !== "conversation" && result.disclaimer && <aside className="chat-disclaimer"><strong>Disclaimer:</strong> {result.disclaimer}</aside>}</div>
+            <div className="assistant-avatar"><img src={oncologyLogo} alt="Oncology AI" /></div>
+            <div className="assistant-content"><h1>{result.response_type === "conversation" ? "Oncology AI" : result.response_type === "rejection" ? "Upload needs attention" : "Answer"}</h1><GenerationStatus mode={result.generation_mode} diagnostics={result.generation_diagnostics} />{resultContract === "full_report" && <CaseComplexity review={result.case_complexity} />}{(resultContract === "full_report" || result.care_urgency?.level === "emergency") && <CareUrgency review={result.care_urgency} />}<ResponseContent contract={resultContract} structuredAnswer={result.structured_answer} summary={result.summary} />{resultContract === "full_report" && result.response_type !== "rejection" && ((result.evidence?.length || 0) + (result.supporting_image_evidence?.length || 0) + (result.uploaded_sources?.length || 0) > 0) && <details className="advanced-evidence"><summary>Show detailed evidence ({result.research_summary?.related_records || 0})</summary><EvidenceList evidence={result.evidence} supportingImages={result.supporting_image_evidence} uploadedSources={result.uploaded_sources} citationValidation={result.citation_validation} /></details>}</div>
           </article>}
-          {turns.map((turn, index) => <React.Fragment key={`${turn.question}-${index}`}><article className="user-turn"><div><MessageAttachments files={turn.fileName ? [{ name: turn.fileName, previewUrl: turn.previewUrl, kind: turn.previewUrl ? "image" : "report" }] : []} /><p>{turn.question}</p></div></article><article className="assistant-turn compact"><div className="assistant-avatar"><FaHeartbeat /></div><div className="assistant-content"><CareUrgency review={turn.careUrgency} />{turn.structuredAnswer ? <StructuredAnswer answer={turn.structuredAnswer} /> : <p className="assistant-summary">{turn.answer}</p>}<details className="advanced-evidence"><summary>Show detailed evidence</summary><EvidenceList evidence={turn.evidence} supportingImages={turn.supportingImages} uploadedSources={turn.uploadedSources} citationValidation={turn.citationValidation} /></details></div></article></React.Fragment>)}
-          {sending && <article className="assistant-turn compact"><div className="assistant-avatar"><FaHeartbeat /></div><div className="assistant-content"><ThinkingIndicator label="Thinking" /></div></article>}
+          {turns.map((turn, index) => { const turnContract = inferResponseContract(turn.responseContract, turn.structuredAnswer); return <React.Fragment key={turn.id || `${turn.question}-${index}`}><article className="user-turn"><div><MessageAttachments files={turn.fileName ? [{ name: turn.fileName, previewUrl: turn.previewUrl, type: turn.fileType, kind: turn.fileKind }] : []} /><p>{turn.question}</p></div></article><article className={`assistant-turn compact ${turn.isError ? "assistant-notice" : ""}`}><div className="assistant-avatar"><img src={oncologyLogo} alt="Oncology AI" /></div><div className="assistant-content">{turn.pending ? <ThinkingIndicator label="Thinking" /> : <><GenerationStatus mode={turn.generationMode} diagnostics={turn.generationDiagnostics} />{turnContract === "full_report" && <CaseComplexity review={turn.caseComplexity} />}{(turnContract === "full_report" || turn.careUrgency?.level === "emergency") && <CareUrgency review={turn.careUrgency} />}<ResponseContent contract={turnContract} structuredAnswer={turn.structuredAnswer} summary={turn.answer} />{turnContract === "full_report" && turn.responseType !== "rejection" && ((turn.evidence?.length || 0) + (turn.supportingImages?.length || 0) + (turn.uploadedSources?.length || 0) > 0) && <details className="advanced-evidence"><summary>Show detailed evidence</summary><EvidenceList evidence={turn.evidence} supportingImages={turn.supportingImages} uploadedSources={turn.uploadedSources} citationValidation={turn.citationValidation} /></details>}</>}</div></article></React.Fragment>; })}
+          {error && <article className="assistant-turn compact assistant-notice"><div className="assistant-avatar"><img src={oncologyLogo} alt="Oncology AI" /></div><div className="assistant-content"><h2>Unable to complete the request</h2><p className="assistant-summary">{error}</p></div></article>}
+          {!initialLoading && !sending && (result || turns.length > 0 || error) && <aside className="conversation-caution"><strong>Caution</strong><span>AI-generated answers may be incomplete or incorrect. Please verify important medical information with a qualified healthcare professional.</span></aside>}
         </div>
         <div className="chat-composer-dock">
-          {error && <p className="chat-error">{error}</p>}
           <form className="chat-followup" onSubmit={sendFollowUp}>
             {attachment && <div className="chat-attachment-preview">{attachment.previewUrl ? <img src={attachment.previewUrl} alt={`Preview of ${attachment.name}`} /> : <FaImage />}<span>{attachment.name}</span><button type="button" onClick={removeFollowupAttachment}><FaXmark /></button></div>}
             <textarea value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="Ask a follow-up about this report or image…" onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); sendFollowUp(event); } }} />
@@ -347,7 +445,6 @@ export default function Results() {
             <button type="submit" disabled={initialLoading || (!question.trim() && !attachment) || sending || !activeSessionId} aria-label="Send follow-up"><FaPaperPlane /></button>
             <input ref={followupFileRef} hidden type="file" accept=".pdf,.png,.jpg,.jpeg" onChange={attachAnotherFile} />
           </form>
-          <small>Oncology AI may make mistakes. Always consult a qualified medical professional for diagnosis and treatment decisions.</small>
         </div>
       </main>
     </div>

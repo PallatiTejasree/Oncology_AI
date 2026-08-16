@@ -1,4 +1,11 @@
+import os
+import unittest
 from pathlib import Path
+
+if os.getenv("RUN_LEGACY_OCR_TESTS") != "1":
+    raise unittest.SkipTest(
+        "set RUN_LEGACY_OCR_TESTS=1 to run the optional PaddleOCR experiment"
+    )
 
 from ocr.extractor import OCRExtractor
 

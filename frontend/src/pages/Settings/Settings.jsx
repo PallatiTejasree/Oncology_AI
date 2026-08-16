@@ -6,6 +6,7 @@ import {
   FaArrowLeft,
   FaUser,
   FaLock,
+  FaKey,
   FaBoxArchive,
   FaRightFromBracket,
   FaChevronRight,
@@ -13,6 +14,7 @@ import {
 
 import "./Settings.css";
 import { changePassword } from "../../services/securityService";
+import api from "../../services/api";
 
 export default function Settings() {
   const navigate = useNavigate();
@@ -22,6 +24,13 @@ export default function Settings() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [passwordError, setPasswordError] = useState("");
   const [savingPassword, setSavingPassword] = useState(false);
+  const [pinOpen, setPinOpen] = useState(false);
+  const [pinPassword, setPinPassword] = useState("");
+  const [newPin, setNewPin] = useState("");
+  const [confirmPin, setConfirmPin] = useState("");
+  const [pinError, setPinError] = useState("");
+  const [pinSuccess, setPinSuccess] = useState("");
+  const [savingPin, setSavingPin] = useState(false);
 
   const handleLogout = () => {
     localStorage.clear();
@@ -47,6 +56,21 @@ export default function Settings() {
     } catch (error) {
       setPasswordError(error.response?.data?.detail || "Unable to change password.");
     } finally { setSavingPassword(false); }
+  };
+
+  const submitPin = async (event) => {
+    event.preventDefault(); setPinError(""); setPinSuccess("");
+    if (!/^(?:\d{4}|\d{6})$/.test(newPin)) return setPinError("PIN must contain exactly 4 or 6 digits.");
+    if (newPin !== confirmPin) return setPinError("Recovery PINs do not match.");
+    setSavingPin(true);
+    try {
+      const response = await api.post("/auth/change-recovery-pin", {
+        current_password: pinPassword, new_recovery_pin: newPin,
+      });
+      setPinSuccess(response.data.message); setPinPassword(""); setNewPin(""); setConfirmPin("");
+    } catch (error) {
+      setPinError(error.response?.data?.detail || "Unable to change recovery PIN.");
+    } finally { setSavingPin(false); }
   };
 
   return (
@@ -94,6 +118,11 @@ export default function Settings() {
             <FaChevronRight />
           </button>
 
+          <button className="settings-item" onClick={() => { setPinOpen(true); setPinError(""); setPinSuccess(""); }}>
+            <div><FaKey /><span>Change Recovery PIN</span></div>
+            <FaChevronRight />
+          </button>
+
           <button
             className="settings-item"
             onClick={() => navigate("/archive")}
@@ -129,6 +158,22 @@ export default function Settings() {
               <label>Confirm new password<input type="password" autoComplete="new-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} minLength="8" required /></label>
               {passwordError && <div className="settings-password-error" role="alert">{passwordError}</div>}
               <div className="settings-modal-actions"><button type="button" onClick={() => setPasswordOpen(false)}>Cancel</button><button type="submit" disabled={savingPassword}>{savingPassword ? "Saving…" : "Save password"}</button></div>
+            </form>
+          </section>
+        </div>
+      )}
+      {pinOpen && (
+        <div className="settings-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setPinOpen(false); }}>
+          <section className="settings-modal" role="dialog" aria-modal="true" aria-labelledby="change-pin-title">
+            <h2 id="change-pin-title">Change Recovery PIN</h2>
+            <p>Confirm your current password, then choose a new 4- or 6-digit recovery PIN.</p>
+            <form onSubmit={submitPin}>
+              <label>Current password<input type="password" autoComplete="current-password" value={pinPassword} onChange={(event) => setPinPassword(event.target.value)} required /></label>
+              <label>New recovery PIN<input type="password" inputMode="numeric" autoComplete="off" value={newPin} onChange={(event) => setNewPin(event.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="4 or 6 digits" required /></label>
+              <label>Confirm recovery PIN<input type="password" inputMode="numeric" autoComplete="off" value={confirmPin} onChange={(event) => setConfirmPin(event.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="Re-enter PIN" required /></label>
+              {pinError && <div className="settings-password-error" role="alert">{pinError}</div>}
+              {pinSuccess && <div className="settings-pin-success" role="status">{pinSuccess}</div>}
+              <div className="settings-modal-actions"><button type="button" onClick={() => setPinOpen(false)}>Cancel</button><button type="submit" disabled={savingPin}>{savingPin ? "Saving…" : "Save PIN"}</button></div>
             </form>
           </section>
         </div>

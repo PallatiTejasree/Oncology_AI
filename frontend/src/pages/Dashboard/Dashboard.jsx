@@ -4,20 +4,23 @@ import { useNavigate } from "react-router-dom";
 
 import {
   FaArrowRightFromBracket,
+  FaBoxArchive,
   FaClockRotateLeft,
   FaGear,
   FaImage,
   FaMessage,
   FaPaperPlane,
+  FaPen,
   FaPlus,
   FaRegImage,
   FaRegUser,
   FaShieldHalved,
+  FaTrash,
   FaXmark,
 } from "react-icons/fa6";
 
 
-import { deleteUploadSession, getUploadHistory, uploadFiles } from "../../services/uploadService";
+import { archiveUploadSession, deleteUploadSession, getUploadHistory, getUploadSession, renameUploadSession, uploadFiles } from "../../services/uploadService";
 
 import "./Dashboard.css";
 import oncologyLogo from "../../assets/oncology-ai-logo.png";
@@ -56,10 +59,13 @@ const suggestions = [
   "Compare this case with similar oncology reports",
 ];
 
+const MAX_UPLOAD_FILES = 3;
+
 export default function Dashboard() {
   const navigate = useNavigate();
 
   const fileInputRef = useRef(null);
+  const recentClickTimerRef = useRef(null);
 
   const [message, setMessage] = useState("");
 
@@ -67,14 +73,98 @@ export default function Dashboard() {
   const [recentAnalyses, setRecentAnalyses] = useState([]);
   const [attachedFiles, setAttachedFiles] = useState([]);
   const [uploadSessionId, setUploadSessionId] = useState(null);
+  const [renameTarget, setRenameTarget] = useState(null);
+  const [renameValue, setRenameValue] = useState("");
+  const [renameSaving, setRenameSaving] = useState(false);
+  const [renameError, setRenameError] = useState("");
+  const [recentMenu, setRecentMenu] = useState(null);
+  const [recentConfirmation, setRecentConfirmation] = useState(null);
+  const [recentActionBusy, setRecentActionBusy] = useState(false);
 
   useEffect(() => {
     const email = localStorage.getItem("email");
     if (!email) return;
     getUploadHistory(email)
-      .then((items) => setRecentAnalyses(items.slice(0, 3)))
+      .then((items) => setRecentAnalyses(items.slice(0, 20)))
       .catch(() => setRecentAnalyses([]));
   }, []);
+
+  const openRecentAnalysis = async (sessionId) => {
+    try {
+      const session = await getUploadSession(sessionId);
+      const saved = session.analyses?.[0]?.result || (session.input_type === "text" && session.messages?.length
+        ? { response_type: "conversation", query_type: "conversation", summary: session.messages[0].answer }
+        : session.latest_summary?.result);
+      if (!saved) throw new Error("This analysis is not complete yet.");
+      navigate("/results", {
+        state: {
+          result: { session_id: sessionId, ...saved },
+          prompt: session.analyses?.[0]?.question || session.original_query || "Analyze this uploaded file",
+          attachments: session.analyses?.[0]?.attachments || [
+            ...(session.reports || []).map((file) => ({ name: file.file_name, type: file.mime_type, kind: "report" })),
+            ...(session.images || []).map((file) => ({ name: file.file_name, type: file.mime_type, kind: "image" })),
+          ],
+          savedMessages: session.messages || [],
+          savedAnalyses: session.analyses || [],
+        },
+      });
+    } catch (error) {
+      window.alert(error.response?.data?.detail || error.message || "Unable to open this analysis.");
+    }
+  };
+
+  const saveRecentName = async (event) => {
+    event.preventDefault();
+    const cleanName = renameValue.trim();
+    if (!cleanName || !renameTarget || renameSaving) return;
+    setRenameSaving(true);
+    setRenameError("");
+    try {
+      const response = await renameUploadSession(renameTarget.session_id, cleanName);
+      setRecentAnalyses((items) => items.map((item) => item.session_id === renameTarget.session_id
+        ? { ...item, session_name: response.name, display_title: response.name }
+        : item));
+      setRenameTarget(null);
+      setRenameValue("");
+    } catch (requestError) {
+      setRenameError(requestError.response?.data?.detail || "Unable to rename this analysis.");
+    } finally {
+      setRenameSaving(false);
+    }
+  };
+
+  const clickRecent = (item) => {
+    window.clearTimeout(recentClickTimerRef.current);
+    if (item.status === "Completed") {
+      recentClickTimerRef.current = window.setTimeout(() => openRecentAnalysis(item.session_id), 240);
+    }
+  };
+
+  const openRecentMenu = (event, item) => {
+    event.preventDefault();
+    window.clearTimeout(recentClickTimerRef.current);
+    setRecentMenu({
+      item,
+      x: Math.min(event.clientX, window.innerWidth - 175),
+      y: Math.min(event.clientY, window.innerHeight - 145),
+    });
+  };
+
+  const runRecentAction = async () => {
+    if (!recentConfirmation || recentActionBusy) return;
+    setRecentActionBusy(true);
+    try {
+      if (recentConfirmation.type === "delete") await deleteUploadSession(recentConfirmation.item.session_id);
+      else await archiveUploadSession(recentConfirmation.item.session_id);
+      setRecentAnalyses((items) => items.filter((item) => item.session_id !== recentConfirmation.item.session_id));
+      setRecentConfirmation(null);
+      setRecentMenu(null);
+    } catch (requestError) {
+      window.alert(requestError.response?.data?.detail || `Unable to ${recentConfirmation.type} this analysis.`);
+    } finally {
+      setRecentActionBusy(false);
+    }
+  };
 
   const [{ greeting, subtitle }] = useState(() => {
     const hour = new Date().getHours();
@@ -101,9 +191,14 @@ export default function Dashboard() {
   };
 
   const handleFileUpload = async (event) => {
-    const files = Array.from(event.target.files);
+    const selectedFiles = Array.from(event.target.files);
+    const files = selectedFiles.slice(0, MAX_UPLOAD_FILES);
 
     if (!files.length) return;
+
+    if (selectedFiles.length > MAX_UPLOAD_FILES) {
+      window.alert(`Only ${MAX_UPLOAD_FILES} files can be uploaded at once. The first ${MAX_UPLOAD_FILES} files will be added.`);
+    }
 
     setUploading(true);
 
@@ -115,10 +210,16 @@ export default function Dashboard() {
         files
       );
 
+      if (response.ignored_files?.length) {
+        window.alert(response.message);
+      }
+
       setUploadSessionId(response.session_id);
       setAttachedFiles(files.map((file) => ({
         name: file.name,
         size: file.size,
+        type: file.type,
+        kind: file.type.startsWith("image/") ? "image" : "report",
         previewUrl: file.type.startsWith("image/") ? URL.createObjectURL(file) : null,
       })));
     } catch (error) {
@@ -221,9 +322,9 @@ export default function Dashboard() {
           {recentAnalyses.length === 0 ? (
             <p>Your recent AI analyses will appear here.</p>
           ) : recentAnalyses.map((item) => (
-            <button key={item.session_id} type="button" onClick={() => navigate("/history")}>
-              {item.display_title || item.session_name}
-            </button>
+            <div className="clinical-recent-row" key={item.session_id}>
+              <button className={item.status !== "Completed" ? "not-ready" : ""} type="button" onClick={() => clickRecent(item)} onDoubleClick={(event) => openRecentMenu(event, item)} aria-disabled={item.status !== "Completed"} title="Click to open · Double-click for actions">{item.display_title || item.session_name}</button>
+            </div>
           ))}
 
         </section>
@@ -409,6 +510,33 @@ export default function Dashboard() {
         </footer>
 
       </main>
+
+      {renameTarget && <div className="dashboard-dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setRenameTarget(null); }}>
+        <form className="dashboard-rename-dialog" onSubmit={saveRecentName}>
+          <span><FaPen /></span>
+          <h2>Rename analysis</h2>
+          <p>Choose a clear name that will appear in Recents, History, and Archive.</p>
+          <label>Analysis name<input autoFocus maxLength="80" value={renameValue} onChange={(event) => setRenameValue(event.target.value)} /></label>
+          {renameError && <small>{renameError}</small>}
+          <div><button type="button" onClick={() => setRenameTarget(null)}>Cancel</button><button type="submit" disabled={!renameValue.trim() || renameSaving}>{renameSaving ? "Saving…" : "Save name"}</button></div>
+        </form>
+      </div>}
+      {recentMenu && <div className="dashboard-context-layer" onMouseDown={(event) => { if (event.target === event.currentTarget) setRecentMenu(null); }}>
+        <section className="dashboard-recent-context" role="menu" style={{ left:recentMenu.x, top:recentMenu.y }}>
+          <button type="button" role="menuitem" onClick={() => { setRenameTarget(recentMenu.item); setRenameValue(recentMenu.item.display_title || recentMenu.item.session_name || ""); setRenameError(""); setRecentMenu(null); }}><FaPen /> Rename</button>
+          <button type="button" role="menuitem" onClick={() => { setRecentConfirmation({ type:"archive", item:recentMenu.item }); setRecentMenu(null); }}><FaBoxArchive /> Archive</button>
+          <button className="danger" type="button" role="menuitem" onClick={() => { setRecentConfirmation({ type:"delete", item:recentMenu.item }); setRecentMenu(null); }}><FaTrash /> Delete</button>
+        </section>
+      </div>}
+      {recentConfirmation && <div className="dashboard-dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setRecentConfirmation(null); }}>
+        <section className="dashboard-action-dialog" role="dialog" aria-modal="true">
+          <span className={recentConfirmation.type}>{recentConfirmation.type === "delete" ? <FaTrash /> : <FaBoxArchive />}</span>
+          <h2>{recentConfirmation.type === "delete" ? "Delete this chat?" : "Archive this chat?"}</h2>
+          <p>{recentConfirmation.type === "delete" ? "This permanently removes the complete conversation, uploaded files, and private vectors. It cannot be undone." : "This moves the conversation to Archive. You can restore it later."}</p>
+          <strong>{recentConfirmation.item.display_title || recentConfirmation.item.session_name}</strong>
+          <div><button type="button" onClick={() => setRecentConfirmation(null)}>Cancel</button><button className={recentConfirmation.type === "delete" ? "danger" : "archive"} type="button" disabled={recentActionBusy} onClick={runRecentAction}>{recentActionBusy ? "Please wait…" : recentConfirmation.type === "delete" ? "Delete" : "Archive"}</button></div>
+        </section>
+      </div>}
 
     </div>
   );

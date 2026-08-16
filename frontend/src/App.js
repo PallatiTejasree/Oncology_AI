@@ -4,13 +4,13 @@ import { Routes, Route, Navigate } from "react-router-dom";
 import Login from "./pages/Login/Login";
 import Dashboard from "./pages/Dashboard/Dashboard";
 import ForgotPassword from "./pages/ForgotPassword/ForgotPassword";
+import ForgotEmail from "./pages/ForgotEmail/ForgotEmail";
 import CompleteProfile from "./pages/CompleteProfile/CompleteProfile";
 import Profile from "./pages/Profile/Profile";
 import Settings from "./pages/Settings/Settings";
 import Results from "./pages/Results/Results";
 import History from "./pages/History/History";
 import Archive from "./pages/Archive/Archive";
-import Register from "./pages/Register/Register";
 import ProtectedRoute from "./components/ProtectedRoute/ProtectedRoute";
 
 function App() {
@@ -20,13 +20,14 @@ function App() {
       <Route path="/" element={<Login />} />
 
       {/* Register */}
-      <Route path="/register" element={<Register />} />
+      <Route path="/register" element={<Navigate to="/" replace />} />
 
       {/* Forgot Password */}
       <Route
         path="/forgot-password"
         element={<ForgotPassword />}
       />
+      <Route path="/forgot-email" element={<ForgotEmail />} />
 
       <Route element={<ProtectedRoute />}>
         <Route path="/dashboard" element={<Dashboard />} />

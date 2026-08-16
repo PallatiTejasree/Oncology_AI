@@ -32,6 +32,7 @@ class UploadSession(Base):
         String(255),
         nullable=False,
     )
+    custom_title = Column(String(80), nullable=True)
 
     status = Column(
         String(50),

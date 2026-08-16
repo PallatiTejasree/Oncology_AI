@@ -18,6 +18,7 @@ from Query.config import (
     TEXT_COLLECTION,
 )
 from Query.query_encoder import BiomedCLIPQueryEncoder, MedCPTQueryEncoder
+from Query.query_preprocessing import preprocess_query_text
 
 
 def _top_k(value: int, collection_count: int) -> int:
@@ -133,6 +134,7 @@ class TextRetriever:
         source_dataset: str | None = None,
         cancer_type: str | None = None,
     ) -> list[dict]:
+        query = preprocess_query_text(query)
         count = self.collection.count()
         vector = self.encoder.encode(query)
         where = build_where(source_dataset, cancer_type, where)
@@ -194,6 +196,7 @@ class ImageRetriever:
         # and otherwise overwhelm clinically interpretable results.
         if source_dataset is None and not include_legacy:
             source_dataset = "pmc_medical_images"
+        query = preprocess_query_text(query)
         where = build_where(source_dataset, cancer_type, where)
         return self._search_vector(self.encoder.encode_text(query), top_k, where)
 

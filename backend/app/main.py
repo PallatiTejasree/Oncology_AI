@@ -1,21 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.db.database import Base, engine
-
-# ==========================
-# Import Models
-# ==========================
-from app.models.user import User
-from app.models.chat import Chat
-from app.models.message import Message
-from app.models.upload_session import UploadSession
-from app.models.report import Report
-from app.models.medical_image import MedicalImage
-from app.models.summary import Summary
-from app.models.chat_history import ChatHistory
-from app.models.quick_response import QuickResponse
-
 # ==========================
 # Import Routes
 # ==========================
@@ -30,11 +15,6 @@ app = FastAPI(
     description="AI-powered Clinical Decision Support System",
     version="1.0.0",
 )
-
-# ==========================
-# Create Database Tables
-# ==========================
-Base.metadata.create_all(bind=engine)
 
 # ==========================
 # CORS Configuration

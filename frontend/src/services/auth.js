@@ -9,10 +9,11 @@ export const loginUser = async (email, password) => {
   return response.data;
 };
 
-export const registerUser = async (email, password) => {
+export const registerUser = async (email, password, recoveryPin) => {
   const response = await api.post("/auth/register", {
     email,
     password,
+    recovery_pin: recoveryPin,
   });
 
   return response.data;

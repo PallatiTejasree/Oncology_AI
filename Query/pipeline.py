@@ -12,6 +12,10 @@ class QueryPipeline:
 
     def query_text(self, query: str, top_k: int = 5) -> dict:
         result = self.search.search_text(query, top_k)
+        result.setdefault("text_results", [])
+        result.setdefault("image_results", [])
+        result.setdefault("fused_results", [])
+        result.setdefault("supporting_image_results", [])
         result["diagnostics"] = {
             "text": retrieval_diagnostics(result["text_results"]),
             "images": retrieval_diagnostics(result["image_results"]),
@@ -25,6 +29,10 @@ class QueryPipeline:
         result = self.search.search_image(
             image_path, ocr_text, top_k, interpretable_only=True
         )
+        result.setdefault("text_results", [])
+        result.setdefault("image_results", [])
+        result.setdefault("fused_results", [])
+        result.setdefault("supporting_image_results", [])
         result["diagnostics"] = {
             "text": retrieval_diagnostics(result["text_results"]),
             "images": retrieval_diagnostics(result["image_results"]),
@@ -36,6 +44,10 @@ class QueryPipeline:
         result = self.search.search_images(
             image_paths, ocr_text, top_k, interpretable_only=True
         )
+        result.setdefault("text_results", [])
+        result.setdefault("image_results", [])
+        result.setdefault("fused_results", [])
+        result.setdefault("supporting_image_results", [])
         result["diagnostics"] = {
             "text": retrieval_diagnostics(result["text_results"]),
             "images": retrieval_diagnostics(result["image_results"]),

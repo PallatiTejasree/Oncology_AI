@@ -1,3 +1,11 @@
+import os
+import unittest
+
+if os.getenv("RUN_LEGACY_OCR_TESTS") != "1":
+    raise unittest.SkipTest(
+        "set RUN_LEGACY_OCR_TESTS=1 to run the optional PaddleOCR experiment"
+    )
+
 from ingestion.metadata_extractor import PDFMetadataExtractor
 from ingestion.pdf_processor import PDFProcessor
 from ingestion.image_filter import ImageFilter

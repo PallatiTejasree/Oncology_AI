@@ -15,6 +15,9 @@ __pycache__/
 **/__pycache__/
 *.py[cod]
 .pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
 .mypy_cache/
 .ruff_cache/
 
@@ -36,6 +39,8 @@ Evaluation/outputs/benchmark_extracted_images/
 Dataset_Downloader/downloads/
 LangChain_Layer/sample_files/
 Ingestion/chroma_db/
+**/chroma_db/
+**/.chroma/
 Ingestion/processed_dataset/
 # All local datasets are reproducible/downloaded artifacts. Keep only the
 # downloader/ingestion source code and small synthetic Evaluation fixtures.
@@ -50,6 +55,8 @@ Ingestion/datasets/
 *.db
 *.sqlite
 *.sqlite3
+*.dump
+*.sql.gz
 *.log
 .DS_Store
 **/.DS_Store
@@ -60,4 +67,7 @@ Ingestion/datasets/
 *.tmp
 *.bak
 *.backup
+*.old
+*.swp
+*.swo
 *~
