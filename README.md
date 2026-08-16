@@ -19,6 +19,33 @@ rank fusion, Gemini-generated structured answers, FastAPI, PostgreSQL, and React
 Downloaded datasets, embeddings, Chroma indexes, user uploads, API keys,
 virtual environments, and generated outputs are intentionally excluded from Git.
 
+## Documentation map
+
+`README.md` is the primary project guide. The additional README files are
+component-specific documentation rather than duplicate project introductions:
+
+- [`Query/README.md`](Query/README.md) — retrieval models, score semantics, and query commands
+- [`Ingestion/README.md`](Ingestion/README.md) — dataset preparation, embeddings, and Chroma ingestion
+- [`Evaluation/README.md`](Evaluation/README.md) — retrieval and structured-answer evaluation
+- [`backend/alembic/README.md`](backend/alembic/README.md) — PostgreSQL migration procedure
+- [`TESTING.md`](TESTING.md) — complete local, live, and performance verification
+
+`frontend/README.md` contains the Create React App command reference for the
+frontend package.
+
+## Database migration layout
+
+Alembic is the canonical deployment migration system:
+
+- `alembic.ini` — project-level Alembic configuration
+- `backend/alembic/env.py` — database connection and SQLAlchemy metadata integration
+- `backend/alembic/script.py.mako` — template used when creating revisions
+- `backend/alembic/versions/` — ordered, immutable migration revisions
+
+The scripts in `backend/migrations/` are preserved compatibility/data-migration
+helpers from the pre-Alembic project. They are not a second Alembic installation;
+active seed revisions import the shared quick-response catalog from that package.
+
 ## Local setup
 
 ```bash
