@@ -1,6 +1,6 @@
 import React from "react";
 import { render, screen } from "@testing-library/react";
-import { GenerationStatus, inferResponseContract, ResponseContent } from "./Results";
+import { EvidenceSupport, GenerationStatus, inferResponseContract, ResponseContent } from "./Results";
 
 test("quota fallback shows a safe status without raw provider details", () => {
   render(<GenerationStatus mode="extractive_fallback" diagnostics={{ quota_exhausted: true, gemini_error: "secret provider exception" }} />);
@@ -16,6 +16,19 @@ test.each([
 ])("labels %s result mode", (mode, label) => {
   render(<GenerationStatus mode={mode} />);
   expect(screen.getByText(label)).toBeInTheDocument();
+});
+
+test("shows an evidence-support percentage with a diagnostic disclaimer", () => {
+  render(<EvidenceSupport reliability={{
+    score: 82,
+    label: "Moderate evidence support",
+    explanation: "This score is not a diagnostic probability.",
+    components: {},
+    reasons: [],
+  }} />);
+  expect(screen.getByText("82%")).toBeInTheDocument();
+  expect(screen.getByText("Evidence Support")).toBeInTheDocument();
+  expect(screen.getByText(/not a diagnostic probability/i)).toBeInTheDocument();
 });
 
 test("general answers render conversationally without report headings", () => {

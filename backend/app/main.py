@@ -8,7 +8,6 @@ from app.api.routes.auth import router as auth_router
 from app.api.routes.upload import router as upload_router
 from app.api.routes.profile import router as profile_router
 from app.api.routes.analysis import router as analysis_router
-from app.api.routes.chat import router as chat_router
 
 app = FastAPI(
     title="Oncology AI API",
@@ -37,7 +36,6 @@ app.include_router(auth_router)
 app.include_router(upload_router)
 app.include_router(profile_router)
 app.include_router(analysis_router)
-app.include_router(chat_router)
 
 # ==========================
 # Root Endpoint

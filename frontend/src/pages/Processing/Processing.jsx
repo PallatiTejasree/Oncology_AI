@@ -13,19 +13,22 @@ export default function Processing() {
   useEffect(() => {
     if (started.current) return;
     started.current = true;
+    const controller = new AbortController();
+    let active = true;
     const run = async () => {
       try {
         const { sessionId, text, attachments } = location.state || {};
         if (!sessionId && !text) throw new Error("No analysis input was provided.");
         const result = sessionId
-          ? await analyzeSession(sessionId, text || "")
-          : await analyzeText(text);
+          ? await analyzeSession(sessionId, text || "", 5, controller.signal)
+          : await analyzeText(text, 5, controller.signal);
         navigate("/results", {
           replace: true,
           state: { result, prompt: text || "Analyze this uploaded file", attachments: attachments || [] },
         });
       } catch (requestError) {
-        setError(
+        if (requestError.code === "ERR_CANCELED") return;
+        if (active) setError(
           requestError.response?.data?.detail ||
             requestError.message ||
             "Analysis failed."
@@ -33,6 +36,11 @@ export default function Processing() {
       }
     };
     run();
+    return () => {
+      active = false;
+      controller.abort();
+      started.current = false;
+    };
   }, [location.state, navigate]);
 
   return (

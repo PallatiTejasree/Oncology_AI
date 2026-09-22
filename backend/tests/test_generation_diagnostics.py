@@ -5,7 +5,6 @@ from unittest.mock import patch
 
 from app.api.routes.analysis import _store_result
 from app.models.chat import Chat
-from app.models.chat_history import ChatHistory
 from app.models.medical_image import MedicalImage
 from app.models.message import Message
 from app.models.report import Report
@@ -53,9 +52,13 @@ class GenerationDiagnosticsPersistenceTests(unittest.TestCase):
             "generation_diagnostics": generation,
             "diagnostics": {"text": {"status": "retrieved"}},
         }
-        with patch("app.api.routes.analysis.conversation_cache.append"):
+        with (
+            patch("app.api.routes.analysis.conversation_cache.append"),
+            patch("app.api.routes.analysis.chat_history_store.append"),
+        ):
             _store_result(db, session, result, 25)
         stored = next(item for item in db.added if isinstance(item, Summary))
+        self.assertIsNone(stored.ai_summary)
         diagnostics = json.loads(stored.diagnostics_json)
         self.assertEqual(diagnostics["generation"]["generation_mode"], "extractive_fallback")
         self.assertEqual(diagnostics["generation"]["provider_error_code"], 429)

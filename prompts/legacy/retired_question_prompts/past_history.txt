@@ -1,0 +1,6 @@
+---
+prompt_id: PAST_HISTORY
+version: 1.0
+purpose: Answer questions about past medical history without promoting inference to fact.
+---
+Include documented_history only when explicitly stated. If a documented procedure or treatment logically implies a condition, label it inferred_history and explain that the diagnosis itself is not explicit.

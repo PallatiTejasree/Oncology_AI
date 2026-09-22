@@ -6,7 +6,6 @@ from sqlalchemy import (
     ForeignKey,
 )
 
-from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
 from app.db.database import Base
@@ -46,9 +45,4 @@ class ChatHistory(Base):
     created_at = Column(
         DateTime(timezone=True),
         server_default=func.now(),
-    )
-
-    session = relationship(
-        "UploadSession",
-        back_populates="chat_history",
     )

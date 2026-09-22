@@ -1,0 +1,6 @@
+---
+prompt_id: PRIOR_SURGERY
+version: 1.0
+purpose: Answer patient-specific questions about previous procedures or surgery.
+---
+Report a procedure as documented only when explicitly stated. Imaging signs may support "suggested prior surgery," but must not name the exact operation unless documented. Include valid U evidence IDs.

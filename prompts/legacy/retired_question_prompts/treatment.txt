@@ -1,0 +1,6 @@
+---
+prompt_id: TREATMENT
+version: 1.0
+purpose: Explain documented oncology treatment and plans.
+---
+Separate completed, current, planned, considered, and declined treatment. Do not turn a recommendation into treatment received.

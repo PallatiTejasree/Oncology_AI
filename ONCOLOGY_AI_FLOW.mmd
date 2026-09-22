@@ -1,0 +1,143 @@
+flowchart TB
+    U[User] <--> UI[React UI]
+    UI <-->|Login/register and JWT requests| API[FastAPI API gateway]
+    API --> AUTH[Authentication and account security]
+    API --> UPLOAD[Upload API]
+    API --> ANALYSIS[Query / Analysis API]
+    API --> HS[History, profile and security settings]
+    DB[(One PostgreSQL database<br/>users/auth · quick responses<br/>sessions · reports/images<br/>quality/status · summaries/evidence<br/>chat/history · diagnostics)]
+    AUTH <-->|Credentials, hashes, profile| DB
+    HS <-->|Read/update/archive/restore/delete| DB
+
+    subgraph INGESTION[INGESTION PIPELINE — runs when files are uploaded]
+        direction TB
+        IV[Validate before storage<br/>1–3 files · PDF/PNG/JPG/JPEG<br/>non-empty · ≤25 MB<br/>PDF signature / image decoding]
+        IVOK{Initial validation passed?}
+        EARLY[Upload error<br/>File not stored]
+        STORE[Store accepted bytes<br/>in session upload folder]
+        META[Create PostgreSQL file metadata<br/>Status: Uploaded]
+        TYPE{PDF or image?}
+        PDF[Extract PDF page text<br/>Tesseract OCR for low-text pages]
+        PCLEAN[Medical-text cleaning]
+        PCHUNK[Overlapping chunks<br/>2400 chars / 300 overlap]
+        PQ[PDF ingestion-quality score 0–100<br/>readable text: 65 base<br/>text volume: up to 25<br/>searchable chunks: 10]
+        PQOK{PDF readable and<br/>score ≥ 40?}
+        PTEXT[MedCPT Article Encoder]
+        IQ[Image quality inspection<br/>resolution · content · sharpness<br/>score 0–100]
+        IQOK{Image checks passed and<br/>score ≥ 40?}
+        IOCR[Tesseract OCR<br/>optional and non-fatal]
+        OCLEAN[Clean and chunk OCR text]
+        OTEXT[MedCPT Article Encoder]
+        IVIS[BiomedCLIP image encoder]
+        REJECT[Retain stored file<br/>Status: Rejected<br/>Persist score and reasons]
+        CT[(Private text ChromaDB<br/>report and image-OCR vectors<br/>user/session metadata)]
+        CI[(Private image ChromaDB<br/>BiomedCLIP vectors<br/>user/session metadata)]
+        INDEXED[Persist Indexed status<br/>quality score and reasons]
+        IV --> IVOK
+        IVOK -->|No| EARLY
+        IVOK -->|Yes| STORE --> META --> TYPE
+        TYPE -->|PDF| PDF
+        PDF -->|Unreadable / extraction failure| REJECT
+        PDF --> PCLEAN --> PCHUNK --> PQ --> PQOK
+        PQOK -->|No| REJECT
+        PQOK -->|Yes| PTEXT --> CT
+        TYPE -->|Image| IQ --> IQOK
+        IQOK -->|No| REJECT
+        IQOK -->|Yes| IOCR
+        IQOK -->|Yes| IVIS --> CI
+        IOCR -->|Text found| OCLEAN --> OTEXT --> CT
+        IOCR -->|No text| INDEXED
+        CT --> INDEXED
+        CI --> INDEXED
+        REJECT --> DB
+        INDEXED --> DB
+    end
+    UPLOAD --> IV
+
+    subgraph QUERY[QUERY / ANALYSIS PIPELINE — runs when the user asks a question]
+        direction TB
+        LOAD[Load owned session/files<br/>Idempotent ingestion recovery]
+        CONSIST[Cross-file consistency<br/>PDF text + image OCR identity signals]
+        MATCH{Explicit patient/case mismatch?}
+        MISMATCH[Deterministic mismatch response<br/>No AI analysis]
+        DOCSCOPE{Uploaded content oncology-related?}
+        SCOPEEXIT[Deterministic out-of-scope response]
+        PRIVATE[Retrieve private evidence<br/>user_id + session_id filter]
+        PDFIMG[Extract useful embedded PDF images<br/>and inspect image quality]
+        SAFETY[Deterministic safety routing]
+        SAFETYEXIT[Safety response]
+        QUICK{Text-only quick response?}
+        QUICKEXIT[Active PostgreSQL quick response]
+        QSCOPE{Oncology scope?}
+        LC[LangChain RunnableLambda<br/>ClinicalAnalysisPipeline]
+        PRE[Bounded query preprocessing<br/>NFC · whitespace · controls<br/>OCR-hyphen repair; not chunked]
+        MQ[MedCPT Query Encoder<br/>text-vector search]
+        BQ[BiomedCLIP text/image encoder<br/>image-vector search]
+        RCT[(Shared reference text ChromaDB<br/>MedCPT article vectors)]
+        RCI[(Shared reference image ChromaDB<br/>BiomedCLIP vectors)]
+        MODE{Ranking by query type}
+        TEXTMODE[Text query<br/>MedCPT primary evidence<br/>filtered image support]
+        IMGMODE[Image/OCR or multi-image<br/>Weighted Reciprocal Rank Fusion]
+        SELECT[Clinical preference ranking<br/>deduplicate and select references]
+        DIAG[Retrieval diagnostics/timing<br/>scores are uncalibrated]
+        CONTEXT[Grounded context<br/>uploads + private excerpts<br/>references + session history]
+        PROMPT[Build grounded prompt]
+        GEMINI[Gemini structured JSON]
+        VALID[JSON/schema and citation validation]
+        GOOD{Valid answer?}
+        REPAIR[Transient retry / schema repair]
+        FALLBACK[Gemini-degraded or<br/>extractive uploaded-fact fallback]
+        CONTRACT[Pydantic response validation<br/>care-urgency signal + diagnostics]
+        SAVE[Persist result, evidence, citations,<br/>diagnostics, timing and chat history<br/>legacy confidence_score = mean accepted-file<br/>ingestion quality; calibrated = false]
+        RESPONSE[FastAPI response]
+        LOAD --> CONSIST --> MATCH
+        MATCH -->|Yes| MISMATCH --> SAVE
+        MATCH -->|No; warnings may continue| DOCSCOPE
+        DOCSCOPE -->|No| SCOPEEXIT --> SAVE
+        DOCSCOPE -->|Yes| PRIVATE --> PDFIMG --> SAFETY
+        SAFETY -->|Triggered| SAFETYEXIT --> SAVE
+        SAFETY -->|Continue| QUICK
+        QUICK -->|Yes| QUICKEXIT --> SAVE
+        QUICK -->|No| QSCOPE
+        QSCOPE -->|Out of scope| SCOPEEXIT
+        QSCOPE -->|Continue| LC --> PRE
+        PRE --> MQ --> RCT
+        PRE --> BQ --> RCI
+        RCT --> MODE
+        RCI --> MODE
+        MODE -->|Text| TEXTMODE --> SELECT
+        MODE -->|Image / multimodal| IMGMODE --> SELECT
+        SELECT --> DIAG --> CONTEXT --> PROMPT --> GEMINI --> VALID --> GOOD
+        GOOD -->|Yes| CONTRACT
+        GOOD -->|No| REPAIR
+        REPAIR -->|Repaired| VALID
+        REPAIR -->|Still unusable| FALLBACK --> CONTRACT
+        CONTRACT --> SAVE --> DB
+        SAVE --> RESPONSE
+    end
+    ANALYSIS --> LOAD
+    DB --> LOAD
+    CT --> PRIVATE
+    CI --> PRIVATE
+    DB --> QUICKEXIT
+    DB --> CONTEXT
+    EARLY --> API
+    RESPONSE --> API
+    API --> UI --> U
+
+    classDef frontend fill:#eef4ff,stroke:#2866b1,color:#102d56,stroke-width:1.5px;
+    classDef backend fill:#eff9ec,stroke:#39823e,color:#173e1b,stroke-width:1.5px;
+    classDef process fill:#fff7e7,stroke:#dc7b12,color:#553000,stroke-width:1.5px;
+    classDef decision fill:#fffaf0,stroke:#dc7b12,color:#553000,stroke-width:1.5px;
+    classDef model fill:#f5f0ff,stroke:#6942bd,color:#30176b,stroke-width:1.5px;
+    classDef vector fill:#eafcff,stroke:#168395,color:#123f48,stroke-width:1.5px;
+    classDef database fill:#edfaff,stroke:#137d91,color:#123f48,stroke-width:1.5px;
+    classDef error fill:#fff0f0,stroke:#df3535,color:#6c1818,stroke-width:1.5px;
+    class U,UI frontend;
+    class API,AUTH,UPLOAD,ANALYSIS,HS,LC,RESPONSE backend;
+    class IV,STORE,META,PDF,PCLEAN,PCHUNK,PQ,IQ,IOCR,OCLEAN,LOAD,CONSIST,PRIVATE,PDFIMG,SAFETY,PRE,SELECT,DIAG,CONTEXT,PROMPT,VALID,CONTRACT,SAVE process;
+    class IVOK,TYPE,PQOK,IQOK,MATCH,DOCSCOPE,QUICK,QSCOPE,MODE,GOOD decision;
+    class PTEXT,OTEXT,IVIS,MQ,BQ,TEXTMODE,IMGMODE,GEMINI,REPAIR,FALLBACK model;
+    class CT,CI,RCT,RCI vector;
+    class DB database;
+    class EARLY,REJECT,MISMATCH,SCOPEEXIT,SAFETYEXIT error;

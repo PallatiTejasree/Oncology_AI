@@ -1,0 +1,6 @@
+---
+prompt_id: MEDICATIONS
+version: 1.0
+purpose: Answer questions about documented medications.
+---
+List only explicitly documented medicines, doses, routes, schedules, and status. Do not infer current use from remote treatment history.

@@ -67,6 +67,27 @@ export function GenerationStatus({ mode, diagnostics = {} }) {
   );
 }
 
+export function EvidenceSupport({ reliability }) {
+  if (!reliability?.score && reliability?.score !== 0) return null;
+  const components = reliability.components || {};
+  const labels = {
+    patient_document_support: "Patient-document support",
+    retrieval_support: "Retrieved evidence",
+    citation_support: "Citation validation",
+    evidence_agreement: "Evidence agreement",
+    completeness: "Completeness",
+  };
+  return (
+    <section className="reliability-score" aria-label="Evidence support score">
+      <div><span><strong>{reliability.score}%</strong><small>Evidence Support</small></span><p><strong>{reliability.label}</strong><small>{reliability.explanation}</small></p></div>
+      <details><summary>Why this score?</summary>
+        <ul>{(reliability.reasons || []).map((reason) => <li key={reason}>{reason}</li>)}</ul>
+        <dl>{Object.entries(components).map(([key, value]) => <div key={key}><dt>{labels[key] || key.replaceAll("_", " ")}</dt><dd>{value}/100</dd></div>)}</dl>
+      </details>
+    </section>
+  );
+}
+
 function EvidenceList({ evidence = [], supportingImages = [], uploadedSources = [], citationValidation }) {
   const records = [...evidence, ...supportingImages];
   if (!records.length && !uploadedSources.length) return null;
@@ -107,10 +128,46 @@ function EvidenceList({ evidence = [], supportingImages = [], uploadedSources = 
 }
 
 function ThinkingIndicator({ label = "Reviewing your question" }) {
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+
+  useEffect(() => {
+    const startedAt = Date.now();
+    const timer = window.setInterval(() => {
+      setElapsedSeconds(Math.floor((Date.now() - startedAt) / 1000));
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const stages = [
+    { after: 0, progress: 8, text: "Preparing your clinical material" },
+    { after: 3, progress: 18, text: "Loading conversation context" },
+    { after: 8, progress: 35, text: "Retrieving relevant oncology evidence" },
+    { after: 15, progress: 52, text: "Selecting and loading the analysis prompts" },
+    { after: 25, progress: 70, text: "Waiting for the AI analysis service" },
+    { after: 45, progress: 84, text: "Checking the response and citations" },
+    { after: 60, progress: 90, text: "The service is taking longer than expected" },
+  ];
+  const stage = [...stages].reverse().find((item) => elapsedSeconds >= item.after) || stages[0];
+  const isDelayed = elapsedSeconds >= 30;
+
   return (
     <div className="chat-thinking-box" role="status" aria-live="polite">
       <span className="chat-thinking-dots" aria-hidden="true"><i /><i /><i /></span>
-      <div><strong>{label}</strong><small>Searching relevant oncology evidence and preparing a clear response…</small></div>
+      <div className="chat-thinking-copy">
+        <span className="chat-thinking-heading"><strong>{label}</strong><b>{stage.progress}%</b></span>
+        <small>{stage.text}…</small>
+        <span className="chat-thinking-progress" aria-label={`Estimated progress ${stage.progress} percent`}>
+          <i style={{ width: `${stage.progress}%` }} />
+        </span>
+        <small className="chat-thinking-meta">
+          Estimated progress · {elapsedSeconds}s elapsed
+        </small>
+        {isDelayed && (
+          <p className="chat-thinking-warning">
+            Still waiting for the server. A slow connection or busy AI service may be responsible; this request will stop automatically if it times out.
+          </p>
+        )}
+      </div>
     </div>
   );
 }
@@ -246,7 +303,7 @@ export default function Results() {
   const [activeSessionId, setActiveSessionId] = useState(initial?.session_id || pendingAnalysis?.sessionId || null);
   const [initialLoading, setInitialLoading] = useState(Boolean(pendingAnalysis && !initial));
   const [turns, setTurns] = useState(() => initialSavedAnalyses.length > 1
-    ? initialSavedAnalyses.slice(1).map((analysis) => ({ question: analysis.question, answer: analysis.result?.summary, responseType: analysis.result?.response_type, responseContract: analysis.result?.response_contract, structuredAnswer: analysis.result?.structured_answer, briefResponse: analysis.result?.brief_response, evidence: analysis.result?.evidence, supportingImages: analysis.result?.supporting_image_evidence, uploadedSources: analysis.result?.uploaded_sources, citationValidation: analysis.result?.citation_validation, careUrgency: analysis.result?.care_urgency, caseComplexity: analysis.result?.case_complexity, generationMode: analysis.result?.generation_mode, generationDiagnostics: analysis.result?.generation_diagnostics, fileName: analysis.attachments?.[0]?.name, fileType: analysis.attachments?.[0]?.type, fileKind: analysis.attachments?.[0]?.kind }))
+    ? initialSavedAnalyses.slice(1).map((analysis) => ({ question: analysis.question, answer: analysis.result?.summary, responseType: analysis.result?.response_type, responseContract: analysis.result?.response_contract, structuredAnswer: analysis.result?.structured_answer, briefResponse: analysis.result?.brief_response, evidence: analysis.result?.evidence, supportingImages: analysis.result?.supporting_image_evidence, uploadedSources: analysis.result?.uploaded_sources, citationValidation: analysis.result?.citation_validation, careUrgency: analysis.result?.care_urgency, caseComplexity: analysis.result?.case_complexity, reliability: analysis.result?.reliability, generationMode: analysis.result?.generation_mode, generationDiagnostics: analysis.result?.generation_diagnostics, fileName: analysis.attachments?.[0]?.name, fileType: analysis.attachments?.[0]?.type, fileKind: analysis.attachments?.[0]?.kind }))
     : initialSavedMessages.slice(1).map((message) => ({ question: message.question, answer: message.answer, responseType: "conversation" })));
   const [question, setQuestion] = useState("");
   const [sending, setSending] = useState(false);
@@ -260,13 +317,15 @@ export default function Results() {
   useEffect(() => {
     if (!pendingAnalysis || initial || initialRequestStarted.current) return;
     initialRequestStarted.current = true;
+    const controller = new AbortController();
+    let active = true;
     const runInitialAnalysis = async () => {
       setInitialLoading(true);
       setError("");
       try {
         const next = pendingAnalysis.sessionId
-          ? await analyzeSession(pendingAnalysis.sessionId, pendingAnalysis.text || "")
-          : await analyzeText(pendingAnalysis.text || "");
+          ? await analyzeSession(pendingAnalysis.sessionId, pendingAnalysis.text || "", 5, controller.signal)
+          : await analyzeText(pendingAnalysis.text || "", 5, controller.signal);
         setResult(next);
         setActiveSessionId(next.session_id);
         setError("");
@@ -279,6 +338,7 @@ export default function Results() {
           },
         });
       } catch (requestError) {
+        if (requestError.code === "ERR_CANCELED") return;
         const message = requestError.response?.data?.detail || requestError.message || "Analysis failed.";
         const rejection = {
           session_id: pendingAnalysis.sessionId || null,
@@ -298,10 +358,15 @@ export default function Results() {
           },
         });
       } finally {
-        setInitialLoading(false);
+        if (active) setInitialLoading(false);
       }
     };
     runInitialAnalysis();
+    return () => {
+      active = false;
+      controller.abort();
+      initialRequestStarted.current = false;
+    };
   }, [initial, navigate, pendingAnalysis]);
 
   useEffect(() => {
@@ -398,7 +463,7 @@ export default function Results() {
     window.setTimeout(() => window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" }), 0);
     try {
       const next = await analyzeSession(activeSessionId, clean);
-      setTurns((current) => current.map((turn) => turn.id === pendingId ? { ...turn, pending: false, answer: next.summary, responseType: next.response_type, responseContract: next.response_contract, structuredAnswer: next.structured_answer, briefResponse: next.brief_response, evidence: next.evidence, supportingImages: next.supporting_image_evidence, uploadedSources: next.uploaded_sources, citationValidation: next.citation_validation, careUrgency: next.care_urgency, caseComplexity: next.case_complexity, generationMode: next.generation_mode, generationDiagnostics: next.generation_diagnostics } : turn));
+      setTurns((current) => current.map((turn) => turn.id === pendingId ? { ...turn, pending: false, answer: next.summary, responseType: next.response_type, responseContract: next.response_contract, structuredAnswer: next.structured_answer, briefResponse: next.brief_response, evidence: next.evidence, supportingImages: next.supporting_image_evidence, uploadedSources: next.uploaded_sources, citationValidation: next.citation_validation, careUrgency: next.care_urgency, caseComplexity: next.case_complexity, reliability: next.reliability, generationMode: next.generation_mode, generationDiagnostics: next.generation_diagnostics } : turn));
       setResult((current) => ({ ...current, session_id: activeSessionId }));
       window.setTimeout(() => window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" }), 0);
     } catch (requestError) {
@@ -431,9 +496,9 @@ export default function Results() {
           {initialLoading && <article className="assistant-turn compact"><div className="assistant-avatar"><img src={oncologyLogo} alt="" /></div><div className="assistant-content"><ThinkingIndicator label="Reviewing your clinical material" /></div></article>}
           {result && <article className="assistant-turn">
             <div className="assistant-avatar"><img src={oncologyLogo} alt="Oncology AI" /></div>
-            <div className="assistant-content"><h1>{result.response_type === "conversation" ? "Oncology AI" : result.response_type === "rejection" ? "Upload needs attention" : "Answer"}</h1><GenerationStatus mode={result.generation_mode} diagnostics={result.generation_diagnostics} />{resultContract === "full_report" && <CaseComplexity review={result.case_complexity} />}{(resultContract === "full_report" || result.care_urgency?.level === "emergency") && <CareUrgency review={result.care_urgency} />}<ResponseContent contract={resultContract} structuredAnswer={result.structured_answer} summary={result.summary} />{resultContract === "full_report" && result.response_type !== "rejection" && ((result.evidence?.length || 0) + (result.supporting_image_evidence?.length || 0) + (result.uploaded_sources?.length || 0) > 0) && <details className="advanced-evidence"><summary>Show detailed evidence ({result.research_summary?.related_records || 0})</summary><EvidenceList evidence={result.evidence} supportingImages={result.supporting_image_evidence} uploadedSources={result.uploaded_sources} citationValidation={result.citation_validation} /></details>}</div>
+            <div className="assistant-content"><h1>{result.response_type === "conversation" ? "Oncology AI" : result.response_type === "rejection" ? "Upload needs attention" : "Answer"}</h1><GenerationStatus mode={result.generation_mode} diagnostics={result.generation_diagnostics} /><EvidenceSupport reliability={result.reliability} />{resultContract === "full_report" && <CaseComplexity review={result.case_complexity} />}{(resultContract === "full_report" || result.care_urgency?.level === "emergency") && <CareUrgency review={result.care_urgency} />}<ResponseContent contract={resultContract} structuredAnswer={result.structured_answer} summary={result.summary} />{resultContract === "full_report" && result.response_type !== "rejection" && ((result.evidence?.length || 0) + (result.supporting_image_evidence?.length || 0) + (result.uploaded_sources?.length || 0) > 0) && <details className="advanced-evidence"><summary>Show detailed evidence ({result.research_summary?.related_records || 0})</summary><EvidenceList evidence={result.evidence} supportingImages={result.supporting_image_evidence} uploadedSources={result.uploaded_sources} citationValidation={result.citation_validation} /></details>}</div>
           </article>}
-          {turns.map((turn, index) => { const turnContract = inferResponseContract(turn.responseContract, turn.structuredAnswer); return <React.Fragment key={turn.id || `${turn.question}-${index}`}><article className="user-turn"><div><MessageAttachments files={turn.fileName ? [{ name: turn.fileName, previewUrl: turn.previewUrl, type: turn.fileType, kind: turn.fileKind }] : []} /><p>{turn.question}</p></div></article><article className={`assistant-turn compact ${turn.isError ? "assistant-notice" : ""}`}><div className="assistant-avatar"><img src={oncologyLogo} alt="Oncology AI" /></div><div className="assistant-content">{turn.pending ? <ThinkingIndicator label="Thinking" /> : <><GenerationStatus mode={turn.generationMode} diagnostics={turn.generationDiagnostics} />{turnContract === "full_report" && <CaseComplexity review={turn.caseComplexity} />}{(turnContract === "full_report" || turn.careUrgency?.level === "emergency") && <CareUrgency review={turn.careUrgency} />}<ResponseContent contract={turnContract} structuredAnswer={turn.structuredAnswer} summary={turn.answer} />{turnContract === "full_report" && turn.responseType !== "rejection" && ((turn.evidence?.length || 0) + (turn.supportingImages?.length || 0) + (turn.uploadedSources?.length || 0) > 0) && <details className="advanced-evidence"><summary>Show detailed evidence</summary><EvidenceList evidence={turn.evidence} supportingImages={turn.supportingImages} uploadedSources={turn.uploadedSources} citationValidation={turn.citationValidation} /></details>}</>}</div></article></React.Fragment>; })}
+          {turns.map((turn, index) => { const turnContract = inferResponseContract(turn.responseContract, turn.structuredAnswer); return <React.Fragment key={turn.id || `${turn.question}-${index}`}><article className="user-turn"><div><MessageAttachments files={turn.fileName ? [{ name: turn.fileName, previewUrl: turn.previewUrl, type: turn.fileType, kind: turn.fileKind }] : []} /><p>{turn.question}</p></div></article><article className={`assistant-turn compact ${turn.isError ? "assistant-notice" : ""}`}><div className="assistant-avatar"><img src={oncologyLogo} alt="Oncology AI" /></div><div className="assistant-content">{turn.pending ? <ThinkingIndicator label="Thinking" /> : <><GenerationStatus mode={turn.generationMode} diagnostics={turn.generationDiagnostics} /><EvidenceSupport reliability={turn.reliability} />{turnContract === "full_report" && <CaseComplexity review={turn.caseComplexity} />}{(turnContract === "full_report" || turn.careUrgency?.level === "emergency") && <CareUrgency review={turn.careUrgency} />}<ResponseContent contract={turnContract} structuredAnswer={turn.structuredAnswer} summary={turn.answer} />{turnContract === "full_report" && turn.responseType !== "rejection" && ((turn.evidence?.length || 0) + (turn.supportingImages?.length || 0) + (turn.uploadedSources?.length || 0) > 0) && <details className="advanced-evidence"><summary>Show detailed evidence</summary><EvidenceList evidence={turn.evidence} supportingImages={turn.supportingImages} uploadedSources={turn.uploadedSources} citationValidation={turn.citationValidation} /></details>}</>}</div></article></React.Fragment>; })}
           {error && <article className="assistant-turn compact assistant-notice"><div className="assistant-avatar"><img src={oncologyLogo} alt="Oncology AI" /></div><div className="assistant-content"><h2>Unable to complete the request</h2><p className="assistant-summary">{error}</p></div></article>}
           {!initialLoading && !sending && (result || turns.length > 0 || error) && <aside className="conversation-caution"><strong>Caution</strong><span>AI-generated answers may be incomplete or incorrect. Please verify important medical information with a qualified healthcare professional.</span></aside>}
         </div>

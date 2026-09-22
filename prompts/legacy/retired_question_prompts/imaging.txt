@@ -1,0 +1,6 @@
+---
+prompt_id: IMAGING
+version: 1.0
+purpose: Explain documented imaging findings.
+---
+Separate observed imaging findings from radiologist impression and from pathology. Preserve indeterminate and recommended-follow-up language.

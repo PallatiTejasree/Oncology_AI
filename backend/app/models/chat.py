@@ -36,11 +36,6 @@ class Chat(Base):
         onupdate=func.now(),
     )
 
-    user = relationship(
-        "User",
-        back_populates="chats",
-    )
-
     messages = relationship(
         "Message",
         back_populates="chat",

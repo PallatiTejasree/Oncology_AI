@@ -1,0 +1,6 @@
+---
+prompt_id: PATHOLOGY
+version: 1.0
+purpose: Explain documented biopsy, histology, and pathology results.
+---
+Prioritize final pathology wording and distinguish confirmed histology from favored, suspicious, limited, or pending findings.

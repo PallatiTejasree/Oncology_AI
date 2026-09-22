@@ -6,7 +6,6 @@ from sqlalchemy import (
     String,
 )
 
-from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
 from app.db.database import Base
@@ -78,10 +77,4 @@ class User(Base):
     last_login = Column(
         DateTime(timezone=True),
         nullable=True,
-    )
-
-    chats = relationship(
-        "Chat",
-        back_populates="user",
-        cascade="all, delete-orphan",
     )

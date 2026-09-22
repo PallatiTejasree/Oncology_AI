@@ -42,7 +42,7 @@ export default function ForgotEmail() {
         {email && <div className="recovered-email"><small>Your registered email</small><strong>{email}</strong><button type="button" onClick={() => navigate("/forgot-password")}>Reset password</button></div>}
         <button className="login-submit" type="submit" disabled={loading}>{loading ? "Checking..." : "Recover Email"}</button>
       </form>
-      <div className="recovery-trust"><span><FaShieldAlt /> PIN protected</span><span>•</span><span>5-attempt limit</span></div>
+      <div className="recovery-trust"><span><FaShieldAlt /> PIN protected</span></div>
     </section>
   </main>;
 }

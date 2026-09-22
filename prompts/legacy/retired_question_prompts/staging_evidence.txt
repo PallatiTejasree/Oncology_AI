@@ -1,0 +1,6 @@
+---
+prompt_id: STAGING_EVIDENCE
+version: 1.0
+purpose: Report staging evidence without unauthorized stage calculation.
+---
+Report T-, N-, and M-related evidence with status documented, suspected, indeterminate, or not documented. Do not calculate TNM or a stage group. A formal stage may be repeated only when explicitly documented in U evidence or application-authorized.

@@ -1,13 +1,23 @@
 import unittest
+import tempfile
+import time
+from pathlib import Path
+from unittest.mock import Mock
 
 from app.services.conversation_cache import ConversationCache
+from app.services.chat_history_store import ChatHistoryStore
 from app.services.safety_responses import care_urgency, safety_result
 from app.services.conversation_responses import is_oncology_document, is_oncology_scope, out_of_scope_result
 
 
 class ConversationCacheTests(unittest.TestCase):
+    def setUp(self):
+        self.history_store = Mock()
+        self.history_store.list.return_value = []
+        self.cache = ConversationCache(history_store=self.history_store)
+
     def test_recent_turn_is_available_without_database_reload(self):
-        cache = ConversationCache()
+        cache = self.cache
         cache.append(
             user_id=7,
             session_id=12,
@@ -19,17 +29,65 @@ class ConversationCacheTests(unittest.TestCase):
         self.assertEqual(turns[0]["user"], "What does EGFR mean?")
 
     def test_users_and_sessions_are_isolated(self):
-        cache = ConversationCache()
+        cache = self.cache
         cache.append(user_id=1, session_id=2, question="one", answer="answer")
         cache.append(user_id=2, session_id=2, question="two", answer="answer")
         self.assertEqual(cache.get(None, user_id=1, session_id=2)[0]["user"], "one")
         self.assertEqual(cache.get(None, user_id=2, session_id=2)[0]["user"], "two")
 
     def test_clear_keeps_context_empty_without_database_reload(self):
-        cache = ConversationCache()
+        cache = self.cache
         cache.append(user_id=1, session_id=3, question="old", answer="answer")
         cache.clear(user_id=1, session_id=3)
         self.assertEqual(cache.get(None, user_id=1, session_id=3), [])
+
+    def test_cache_does_not_trim_long_conversations(self):
+        cache = self.cache
+        for index in range(30):
+            cache.append(
+                user_id=9,
+                session_id=4,
+                question=f"question {index}",
+                answer=f"answer {index}",
+            )
+        turns = cache.get(None, user_id=9, session_id=4)
+        self.assertEqual(len(turns), 30)
+        self.assertEqual(turns[0]["user"], "question 0")
+        self.assertEqual(turns[-1]["assistant"], "answer 29")
+
+    def test_expired_or_restarted_cache_loads_entire_json_session(self):
+        stored = [
+            {"question": f"question {index}", "answer": f"answer {index}"}
+            for index in range(25)
+        ]
+        history_store = Mock()
+        history_store.list.return_value = stored
+        cache = ConversationCache(history_store=history_store)
+        turns = cache.get(None, user_id=5, session_id=8)
+        self.assertEqual(len(turns), 25)
+        history_store.list.assert_called_once_with(user_id=5, session_id=8)
+
+    def test_new_runtime_cache_rehydrates_from_persisted_history(self):
+        history_store = Mock()
+        history_store.list.return_value = [{"question": "saved", "answer": "restored"}]
+        restarted_cache = ConversationCache(history_store=history_store)
+        turns = restarted_cache.get(None, user_id=3, session_id=7)
+        self.assertEqual(turns, [{"user": "saved", "assistant": "restored"}])
+        history_store.list.assert_called_once_with(user_id=3, session_id=7)
+
+    def test_runtime_expiry_retains_json_and_rehydrates_complete_session(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            store = ChatHistoryStore(Path(temporary) / "chat_cache", Path(temporary) / "legacy.json")
+            for index in range(12):
+                store.append(user_id=2, session_id=6, question=f"q{index}", answer=f"a{index}")
+            cache = ConversationCache(history_store=store)
+            self.assertEqual(len(cache.get(None, user_id=2, session_id=6)), 12)
+            cache._entries[(2, 6)].expires_at = time.monotonic() - 1
+
+            restored = cache.get(None, user_id=2, session_id=6)
+
+            self.assertEqual(len(restored), 12)
+            self.assertTrue((Path(temporary) / "chat_cache" / "2" / "6.json").is_file())
 
 
 class SafetyRoutingTests(unittest.TestCase):

@@ -1,0 +1,6 @@
+---
+prompt_id: BIOMARKERS
+version: 1.0
+purpose: Explain documented biomarker and molecular results.
+---
+For each marker report name, result, interpretation status, value, specimen, method, and U evidence IDs when available. Do not invent missing assay details.

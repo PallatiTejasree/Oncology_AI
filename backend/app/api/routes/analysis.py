@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -13,13 +14,14 @@ from sqlalchemy.orm import Session
 from app.db.database import get_db
 from app.langchain.service import get_langchain_analysis_service
 from app.models.summary import Summary
-from app.models.chat_history import ChatHistory
 from app.models.upload_session import UploadSession
 from app.models.user import User
 from app.middleware.auth_middleware import get_current_user
 from app.schemas.analysis import AnalysisResponseContract, SessionAnalysisRequest, TextAnalysisRequest
 from app.services.conversation_responses import conversational_result, is_oncology_document, is_oncology_scope, managed_response, out_of_scope_result
 from app.services.conversation_cache import conversation_cache
+from app.services.chat_history_store import chat_history_store
+from app.services.reliability_score import calculate_reliability
 from app.services.safety_responses import care_urgency, safety_result
 from app.services.pdf_extraction import extract_pdf_images
 from app.services.upload_ingestion import (
@@ -31,6 +33,12 @@ from app.services.upload_consistency import assess_upload_consistency, consisten
 
 
 router = APIRouter(prefix="/analysis", tags=["Analysis"])
+logger = logging.getLogger(__name__)
+
+
+def _timing(stage: str, started: float) -> None:
+    """Emit metadata-only timing logs; never include request or report text."""
+    logger.info("[analysis] %s: %.2fs", stage, time.perf_counter() - started)
 
 
 @router.get("/status")
@@ -113,13 +121,22 @@ def _uploaded_source_payload(reports, images, private_evidence: dict) -> list[di
     for image in images:
         excerpts = retrieved_by_name.get(image.file_name) or []
         ocr_text = " ".join((image.extracted_text or "").split())
+        # An uploaded image is valid U evidence even when OCR returns nothing.
+        # Keep the artifact facts available to the answer contract so an
+        # image-only request is not downgraded to "no readable finding".
+        image_context = (
+            f"Uploaded medical image artifact: {image.file_name}. "
+            f"MIME type: {image.mime_type or 'unknown'}. "
+            "The image was decoded and indexed through the BiomedCLIP image pathway. "
+            + ("OCR text: " + ocr_text[:6000] if ocr_text else "No readable text was detected; this does not mean the image is unanalyzable.")
+        )
         payload.append({
             "file_name": image.file_name,
             "source_type": "uploaded_image",
             "mime_type": image.mime_type,
-            "content": ocr_text[:6000],
+            "content": image_context,
             "evidence_segments": [
-                {"origin": "original_extraction", "content": ocr_text[:6000]},
+                {"origin": "uploaded_image_artifact", "content": image_context},
                 *excerpts,
             ],
         })
@@ -133,6 +150,9 @@ def _store_result(
     processing_time_ms: int,
     interaction_question: str | None = None,
 ) -> Summary:
+    reliability_started = time.perf_counter()
+    result["reliability"] = calculate_reliability(result)
+    _timing("reliability scoring", reliability_started)
     diagnostics = result.get("diagnostics") or {}
     if result.get("generation_diagnostics"):
         diagnostics = {**diagnostics, "generation": result["generation_diagnostics"]}
@@ -145,8 +165,9 @@ def _store_result(
     }
     stored = Summary(
         session_id=session.id,
-        # Keep the complete response for backward-compatible result reopening.
-        ai_summary=json.dumps(result, ensure_ascii=False),
+        # Generated question/answer content is stored only in the JSON chat
+        # record. PostgreSQL retains analysis metadata and diagnostics.
+        ai_summary=None,
         confidence_score=_session_quality_score(session),
         model_name=result["model_name"],
         processing_status="Completed",
@@ -168,9 +189,15 @@ def _store_result(
         + [item.file_name for item in session.medical_images]
     ) or "Uploaded clinical material"
     answer = result.get("summary") or "No summary was generated."
-    db.add(ChatHistory(user_id=session.user_id, session_id=session.id, question=question, answer=answer))
     db.commit()
     db.refresh(stored)
+    chat_history_store.append(
+        user_id=session.user_id,
+        session_id=session.id,
+        question=question,
+        answer=answer,
+        result=result,
+    )
     conversation_cache.append(
         user_id=session.user_id,
         session_id=session.id,
@@ -206,8 +233,18 @@ def _store_failure(
         [item.file_name for item in session.reports]
         + [item.file_name for item in session.medical_images]
     ) or "Uploaded clinical material"
-    db.add(ChatHistory(user_id=session.user_id, session_id=session.id, question=question, answer=clean_reason))
     db.commit()
+    chat_history_store.append(
+        user_id=session.user_id,
+        session_id=session.id,
+        question=question,
+        answer=clean_reason,
+        result={
+            "response_type": "rejection",
+            "query_type": "validation",
+            "summary": clean_reason,
+        },
+    )
 
 
 def _extract_pdf(path: Path) -> str:
@@ -304,6 +341,8 @@ def analyze_text(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    request_started = time.perf_counter()
+    logger.info("[analysis] request started (type=text)")
     clean_text = request.text.strip()
     session = UploadSession(
         user_id=current_user.id,
@@ -320,13 +359,17 @@ def analyze_text(
     try:
         result = _run_analysis(db=db, text=clean_text, image_path=None, top_k=request.top_k)
         elapsed = round((time.perf_counter() - started) * 1000)
+        persistence_started = time.perf_counter()
         stored = _store_result(
             db, session, result, elapsed, interaction_question=clean_text
         )
+        _timing("response persistence", persistence_started)
+        _timing("total", request_started)
         return {"session_id": session.id, "summary_id": stored.id, **result}
     except HTTPException as error:
         elapsed = round((time.perf_counter() - started) * 1000)
         _store_failure(db, session, str(error.detail), elapsed, interaction_question=clean_text)
+        _timing("total (failed)", request_started)
         raise
 
 
@@ -337,6 +380,8 @@ def analyze_session(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    request_started = time.perf_counter()
+    logger.info("[analysis] request started (type=session)")
     session = (
         db.query(UploadSession)
         .filter(UploadSession.id == session_id, UploadSession.user_id == current_user.id)
@@ -355,9 +400,11 @@ def analyze_session(
     started = time.perf_counter()
     try:
         if session.input_type == "text" and not session.reports and not session.medical_images:
+            context_started = time.perf_counter()
             recent_turns = conversation_cache.get(
                 db, user_id=current_user.id, session_id=session.id
             )
+            _timing("conversation context", context_started)
             result = _run_analysis(
                 db=db,
                 text=question or session.original_query,
@@ -368,12 +415,17 @@ def analyze_session(
                 has_uploaded_material=False,
             )
             elapsed = round((time.perf_counter() - started) * 1000)
+            persistence_started = time.perf_counter()
             stored = _store_result(
                 db, session, result, elapsed, interaction_question=question or None
             )
+            _timing("response persistence", persistence_started)
+            _timing("total", request_started)
             return {"session_id": session.id, "summary_id": stored.id, **result}
 
+        ingestion_started = time.perf_counter()
         ingestion = ingest_session(db, session)
+        _timing("upload ingestion", ingestion_started)
         accepted_reports = [
             item for item in session.reports
             if item.processing_status in {"Indexed", "Processed"}
@@ -398,9 +450,12 @@ def analyze_session(
         image_ocr_texts = [
             image.extracted_text for image in accepted_images if image.extracted_text
         ]
+        context_started = time.perf_counter()
         recent_turns = conversation_cache.get(
             db, user_id=current_user.id, session_id=session.id
         )
+        _timing("conversation context", context_started)
+        consistency_started = time.perf_counter()
         consistency = assess_upload_consistency([
             *[
                 {"file_name": report.file_name, "text": report.extracted_text}
@@ -411,6 +466,7 @@ def analyze_session(
                 for image in accepted_images
             ],
         ])
+        _timing("upload consistency", consistency_started)
         if not consistency.consistent:
             friendly_message = managed_response(
                 db,
@@ -422,9 +478,12 @@ def analyze_session(
             )
             result = mismatch_result(consistency, friendly_message)
             elapsed = round((time.perf_counter() - started) * 1000)
+            persistence_started = time.perf_counter()
             stored = _store_result(
                 db, session, result, elapsed, interaction_question=question or None
             )
+            _timing("response persistence", persistence_started)
+            _timing("total", request_started)
             return {"session_id": session.id, "summary_id": stored.id, **result}
         extracted_material = "\n\n".join([*report_texts, *image_ocr_texts]).strip()
         if (
@@ -440,21 +499,27 @@ def analyze_session(
             )
             result.setdefault("diagnostics", {})["upload_consistency"] = consistency_diagnostics(consistency)
             elapsed = round((time.perf_counter() - started) * 1000)
+            persistence_started = time.perf_counter()
             stored = _store_result(db, session, result, elapsed, interaction_question=question or None)
+            _timing("response persistence", persistence_started)
+            _timing("total", request_started)
             return {"session_id": session.id, "summary_id": stored.id, **result}
         private_query = question or " ".join(report_texts)[:4000] or "uploaded clinical image"
+        private_retrieval_started = time.perf_counter()
         private_evidence = retrieve_private_content(
             user_id=current_user.id,
             session_id=session.id,
             question=private_query,
             top_k=request.top_k,
         )
+        _timing("private retrieval", private_retrieval_started)
 
         image_paths = [Path(image.file_path) for image in accepted_images]
         extracted_pdf_images = []
         uploaded_sources = _uploaded_source_payload(
             accepted_reports, accepted_images, private_evidence
         )
+        pdf_images_started = time.perf_counter()
         for report in accepted_reports:
             report_path = Path(report.file_path)
             extracted = extract_pdf_images(
@@ -471,6 +536,7 @@ def analyze_session(
                         "file_name": f"{report.file_name} page {item.page} image",
                         "reason": quality.rejection_reason,
                     })
+        _timing("PDF image extraction", pdf_images_started)
         for image in accepted_images:
             image.processing_status = "Processed"
         result = _run_analysis(
@@ -502,9 +568,12 @@ def analyze_session(
             "calibrated": False,
         }
         elapsed = round((time.perf_counter() - started) * 1000)
+        persistence_started = time.perf_counter()
         stored = _store_result(
             db, session, result, elapsed, interaction_question=question or None
         )
+        _timing("response persistence", persistence_started)
+        _timing("total", request_started)
         return {"session_id": session.id, "summary_id": stored.id, **result}
     except HTTPException as error:
         elapsed = round((time.perf_counter() - started) * 1000)
@@ -517,10 +586,12 @@ def analyze_session(
                 image.processing_status = "Failed"
                 image.rejection_reason = str(error.detail)[:2000]
         _store_failure(db, session, str(error.detail), elapsed, interaction_question=question or None)
+        _timing("total (failed)", request_started)
         raise
     except Exception as error:
         elapsed = round((time.perf_counter() - started) * 1000)
         _store_failure(db, session, str(error), elapsed, interaction_question=question or None)
+        _timing("total (failed)", request_started)
         raise HTTPException(500, f"Analysis failed: {error}") from error
 
 
@@ -539,6 +610,6 @@ def clear_session_cache(
         raise HTTPException(404, "Upload session not found")
     conversation_cache.clear(user_id=current_user.id, session_id=session_id)
     return {
-        "message": "Cached conversation context cleared. PostgreSQL history was retained.",
+        "message": "Cached conversation context cleared. JSON history was retained.",
         "session_id": session_id,
     }

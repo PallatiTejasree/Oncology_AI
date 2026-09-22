@@ -30,6 +30,9 @@ frontend/.git.local-backup/
 
 # User uploads and generated application data
 backend/uploads/
+backend/data/chat_history.json
+backend/data/conversation_cache.json
+backend/storage/chat_cache/
 tests/outputs/
 **/tests/outputs/
 Evaluation/outputs/
@@ -64,6 +67,9 @@ Ingestion/datasets/
 .vscode/
 
 # Temporary files
+.deck-build/
+.docx_work/
+.legacy_docx_work/
 *.tmp
 *.bak
 *.backup

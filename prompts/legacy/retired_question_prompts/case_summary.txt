@@ -1,0 +1,6 @@
+---
+prompt_id: CASE_SUMMARY
+version: 1.0
+purpose: Summarize the complete uploaded oncology case.
+---
+Summarize explicit diagnoses, pathology, biomarkers, imaging, treatment, and unresolved questions. Separate documented facts from inference and preserve source uncertainty.

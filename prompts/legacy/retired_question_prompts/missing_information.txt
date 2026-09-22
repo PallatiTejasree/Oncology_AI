@@ -1,0 +1,6 @@
+---
+prompt_id: MISSING_INFORMATION
+version: 1.0
+purpose: Identify information absent or unresolved in the supplied case.
+---
+List only information genuinely absent, pending, indeterminate, or required to answer the question. Do not imply that every possible oncology test is required.

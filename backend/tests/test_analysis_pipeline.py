@@ -6,8 +6,10 @@ import unittest
 from unittest.mock import patch
 
 from app.langchain.pipeline import (
-    ClinicalAnalysisPipeline, DISCLAIMER, _classify_provider_error, _extract_uploaded_points, _normalize_structured_answer,
-    _rank_and_deduplicate_references, _uploaded_evidence_chunks, _uploaded_reference_profile, _validate_citations,
+    ClinicalAnalysisPipeline, DISCLAIMER, _classify_provider_error, _deterministic_prompt_id,
+    _enforce_stage_authorization, _extract_uploaded_points, _normalize_structured_answer,
+    _rank_and_deduplicate_references, _relevant_conversation_turns, _request_contract,
+    _uploaded_evidence_chunks, _uploaded_reference_profile, _validate_citations,
 )
 from app.schemas.analysis import FullReportAnswer
 
@@ -54,6 +56,64 @@ class _FakeMultimodalRetrieval:
 
 
 class ClinicalAnalysisPipelineTests(unittest.TestCase):
+    def test_all_specific_report_questions_use_the_same_focused_contract(self):
+        questions = (
+            "What is my EGFR result?",
+            "Were lymph nodes positive?",
+            "What was the tumor size?",
+            "What did the biopsy show?",
+            "Was metastasis found?",
+            "What is my PD-L1?",
+            "Is ALK negative?",
+            "What is my stage?",
+            "What molecular mutation was found?",
+        )
+        for question in questions:
+            with self.subTest(question=question):
+                self.assertEqual(
+                    _request_contract(question, has_uploaded_sources=True),
+                    "focused",
+                )
+                self.assertEqual(_deterministic_prompt_id(question), "FOCUSED_CONTRACT")
+
+    def test_full_report_requests_use_full_report_contract(self):
+        for question in (
+            "Explain my complete report.",
+            "Summarize the whole report.",
+            "Tell me all important findings.",
+        ):
+            with self.subTest(question=question):
+                self.assertEqual(
+                    _request_contract(question, has_uploaded_sources=True),
+                    "full_report",
+                )
+                self.assertEqual(
+                    _deterministic_prompt_id(question, full_report=True),
+                    "FULL_REPORT_CONTRACT",
+                )
+
+    def test_general_oncology_and_symptom_questions_use_general_contract(self):
+        for question in (
+            "What is EGFR?",
+            "What is immunotherapy?",
+            "What does adenocarcinoma mean?",
+            "I have chest pain.",
+            "I have fever after chemotherapy.",
+            "I feel dizzy.",
+            "I cannot breathe properly.",
+        ):
+            with self.subTest(question=question):
+                self.assertEqual(
+                    _request_contract(question, has_uploaded_sources=True),
+                    "general",
+                )
+
+    def test_python_blocks_undocumented_stage_assignment(self):
+        answer = {"staging": {"final_stage": "Stage IV", "can_assign_final_stage": True, "explanation": "calculated"}}
+        result = _enforce_stage_authorization(answer, [{"content": "A lung mass and indeterminate liver lesion."}])
+        self.assertIsNone(result["staging"]["final_stage"])
+        self.assertFalse(result["staging"]["can_assign_final_stage"])
+
     @staticmethod
     def _empty_inventory():
         return {
@@ -109,7 +169,7 @@ class ClinicalAnalysisPipelineTests(unittest.TestCase):
         pipeline = ClinicalAnalysisPipeline.__new__(ClinicalAnalysisPipeline)
         with patch.dict(os.environ, {"GEMINI_API_KEY": "test-key"}, clear=True), patch.dict(sys.modules, {"google": fake_google}), patch("app.langchain.pipeline.time.sleep") as sleep:
             _, model, structured = pipeline._summarize("What is HER2?", [], [], [], brief_response=True)
-        self.assertEqual(model, "gemini-2.5-flash")
+        self.assertEqual(model, "gemini-3.6-flash")
         self.assertEqual(structured["answer"], "General oncology information.")
         self.assertEqual(len(calls), 2)
         sleep.assert_called_once_with(1.0)
@@ -379,7 +439,8 @@ class ClinicalAnalysisPipelineTests(unittest.TestCase):
                 }],
                 top_k=5,
             )
-        self.assertFalse(result["brief_response"])
+        self.assertEqual(result["response_contract"], "focused")
+        self.assertTrue(result["structured_answer"])
 
     def test_gemini_failure_returns_useful_extractive_report_findings(self):
         pipeline = ClinicalAnalysisPipeline.__new__(ClinicalAnalysisPipeline)
@@ -401,7 +462,7 @@ class ClinicalAnalysisPipelineTests(unittest.TestCase):
                 uploaded_sources=uploaded,
                 top_k=5,
             )
-        self.assertIn("uploaded report explicitly documents", result["summary"])
+        self.assertIn("uploaded report explicitly", result["summary"].lower())
         self.assertIsNotNone(result["structured_answer"])
         self.assertEqual(result["generation_diagnostics"]["status"], "extractive_fallback")
 
@@ -509,7 +570,7 @@ class ClinicalAnalysisPipelineTests(unittest.TestCase):
         ):
             summary, model, _ = pipeline._summarize("What is the main diagnosis?", [], [], uploaded)
         self.assertEqual(summary, "Generated by Gemini.")
-        self.assertEqual(model, "gemini-2.5-flash")
+        self.assertEqual(model, "gemini-3.6-flash")
         self.assertLess(
             captured["prompt"].index("non-small cell carcinoma"),
             captured["prompt"].index("right upper-lobe mass"),
@@ -629,6 +690,19 @@ class ClinicalAnalysisPipelineTests(unittest.TestCase):
             sources["private_text"]["ownership_filter"],
             "user_id_and_session_id",
         )
+
+    def test_long_chat_context_keeps_relevant_older_and_recent_turns(self):
+        history = [
+            {"user": "The patient previously had CABG heart surgery.", "assistant": "That procedure is documented."},
+            *[
+                {"user": f"unrelated question {index}", "assistant": f"unrelated answer {index}"}
+                for index in range(12)
+            ],
+        ]
+        selected = _relevant_conversation_turns(history, "When was the heart surgery?")
+        self.assertIn(history[0], selected)
+        self.assertEqual(selected[-8:], history[-8:])
+        self.assertLess(len(selected), len(history))
 
 
 if __name__ == "__main__":

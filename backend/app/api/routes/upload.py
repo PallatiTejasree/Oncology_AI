@@ -21,6 +21,7 @@ from app.models.upload_session import UploadSession
 from app.models.user import User
 from app.middleware.auth_middleware import get_current_user
 from app.services.conversation_cache import conversation_cache
+from app.services.chat_history_store import chat_history_store
 from app.services.upload_ingestion import delete_private_session_vectors, ingest_session
 
 
@@ -45,17 +46,12 @@ def _session_query(db: Session):
         joinedload(UploadSession.reports),
         joinedload(UploadSession.medical_images),
         joinedload(UploadSession.summaries),
-        joinedload(UploadSession.chat_history),
     )
 
 
-def _summary_payload(summary: object | None):
+def _summary_payload(summary: object | None, result: dict | None = None):
     if not summary:
         return None
-    try:
-        result = json.loads(summary.ai_summary) if summary.ai_summary else None
-    except json.JSONDecodeError:
-        result = {"summary": summary.ai_summary}
     return {
         "id": summary.id,
         "model_name": summary.model_name,
@@ -116,7 +112,7 @@ def _rejected_file_payload(item, session: UploadSession, kind: str) -> dict:
         "stored": path.is_file(),
     }
 def _serialize(session: UploadSession, detailed: bool = False) -> dict:
-    completed = [item for item in session.summaries if item.ai_summary]
+    completed = [item for item in session.summaries if item.processing_status == "Completed"]
     latest = max(completed or session.summaries, key=lambda item: item.created_at) if session.summaries else None
     payload = {
         "session_id": session.id,
@@ -136,6 +132,9 @@ def _serialize(session: UploadSession, detailed: bool = False) -> dict:
         + [item.file_name for item in session.medical_images],
     }
     if detailed:
+        chat_messages = chat_history_store.list(
+            user_id=session.user_id, session_id=session.id
+        )
         payload["reports"] = [
             {
                 "id": item.id,
@@ -168,23 +167,31 @@ def _serialize(session: UploadSession, detailed: bool = False) -> dict:
             }
             for item in session.medical_images
         ]
-        payload["latest_summary"] = _summary_payload(latest)
+        ordered_summaries = sorted(session.summaries, key=lambda value: value.created_at)
+        latest_index = ordered_summaries.index(latest) if latest in ordered_summaries else -1
+        latest_message = (
+            chat_messages[latest_index]
+            if 0 <= latest_index < len(chat_messages)
+            else None
+        )
+        latest_result = latest_message.get("result") if latest_message else None
+        payload["latest_summary"] = _summary_payload(latest, latest_result)
         payload["messages"] = [
             {
-                "id": item.id,
-                "question": item.question,
-                "answer": item.answer,
-                "created_at": item.created_at,
+                "id": item["id"],
+                "question": item["question"],
+                "answer": item["answer"],
+                "created_at": item["created_at"],
             }
-            for item in sorted(session.chat_history, key=lambda value: value.created_at)
+            for item in chat_messages
         ]
-        ordered_summaries = sorted(session.summaries, key=lambda value: value.created_at)
-        ordered_messages = sorted(session.chat_history, key=lambda value: value.created_at)
+        ordered_messages = chat_messages
         all_files = sorted([*session.reports, *session.medical_images], key=lambda value: value.created_at)
         previous_summary_at = None
         payload["analyses"] = []
         for index, item in enumerate(ordered_summaries):
-            summary_payload = _summary_payload(item)
+            message = ordered_messages[index] if index < len(ordered_messages) else None
+            summary_payload = _summary_payload(item, message.get("result") if message else None)
             result = summary_payload.get("result") if summary_payload else None
             if not result and item.failure_reason:
                 result = {
@@ -200,10 +207,9 @@ def _serialize(session: UploadSession, detailed: bool = False) -> dict:
                 if value.created_at <= item.created_at
                 and (previous_summary_at is None or value.created_at > previous_summary_at)
             ]
-            message = ordered_messages[index] if index < len(ordered_messages) else None
             payload["analyses"].append({
                 "result": result,
-                "question": message.question if message else session.original_query or "Analyze this uploaded file",
+                "question": message["question"] if message else session.original_query or "Analyze this uploaded file",
                 "attachments": [{
                     "name": value.file_name,
                     "type": value.mime_type,
@@ -569,7 +575,8 @@ def delete_upload_session(
     vector_cleanup = delete_private_session_vectors(
         user_id=current_user.id, session_id=session_id
     )
-    conversation_cache.clear(user_id=current_user.id, session_id=session_id)
+    conversation_cache.delete(user_id=current_user.id, session_id=session_id)
+    chat_history_store.delete_session(user_id=current_user.id, session_id=session_id)
     db.delete(session)
     db.commit()
     for path in paths:

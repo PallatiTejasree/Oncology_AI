@@ -31,10 +31,13 @@ class ArchitectureContractTests(unittest.TestCase):
         main_source = Path(__file__).parents[1] / "app" / "main.py"
         self.assertNotIn("metadata.create_all", main_source.read_text())
 
-    def test_postgres_is_the_conversation_context_source_of_truth(self):
+    def test_json_is_the_conversation_context_source_of_truth(self):
         source = Path(__file__).parents[1] / "app" / "services" / "conversation_cache.py"
         text = source.read_text()
-        self.assertIn("db.query(ChatHistory)", text)
+        self.assertIn("self.history_store.list", text)
+        self.assertIn("ACTIVE_CACHE_TTL_SECONDS", text)
+        self.assertIn("self._entries", text)
+        self.assertNotIn("db.query(ChatHistory)", text)
         self.assertIsNotNone(conversation_cache)
 
     def test_analysis_route_passes_private_retrieval_into_orchestration(self):

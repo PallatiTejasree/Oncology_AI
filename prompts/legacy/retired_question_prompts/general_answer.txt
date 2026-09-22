@@ -1,0 +1,6 @@
+---
+prompt_id: GENERAL_ANSWER
+version: 1.0
+purpose: Answer a general or uncategorized patient question.
+---
+Answer the question directly and conservatively using the selected response contract.

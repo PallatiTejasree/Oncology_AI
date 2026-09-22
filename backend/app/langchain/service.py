@@ -3,12 +3,17 @@
 from __future__ import annotations
 
 import os
+import logging
+import time
 from functools import lru_cache
 from typing import Any
 
 from langchain_core.runnables import RunnableLambda
 
 from app.langchain.pipeline import get_analysis_pipeline
+
+
+logger = logging.getLogger(__name__)
 
 
 class LangChainAnalysisService:
@@ -21,7 +26,14 @@ class LangChainAnalysisService:
 
     @staticmethod
     def _invoke_pipeline(payload: dict[str, Any]) -> dict[str, Any]:
-        return get_analysis_pipeline().analyze(**payload)
+        initialization_started = time.perf_counter()
+        logger.info("[analysis] pipeline/model initialization started")
+        pipeline = get_analysis_pipeline()
+        logger.info(
+            "[analysis] pipeline/model initialization: %.2fs",
+            time.perf_counter() - initialization_started,
+        )
+        return pipeline.analyze(**payload)
 
     def analyze(self, **payload: Any) -> dict[str, Any]:
         return self.chain.invoke(payload)
@@ -35,7 +47,7 @@ class LangChainAnalysisService:
             "retrieval": "QueryPipeline + private Chroma retrieval",
             "generation_provider": "Google Gemini",
             "gemini_configured": gemini_configured,
-            "gemini_model": os.getenv("GEMINI_MODEL", "gemini-2.5-flash"),
+            "gemini_model": os.getenv("GEMINI_MODEL", "gemini-3.6-flash"),
             "ready": gemini_configured,
         }
 

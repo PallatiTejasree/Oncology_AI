@@ -90,4 +90,6 @@ class AnalysisResponseContract(BaseModel):
     evidence: list[dict[str, Any]] = Field(default_factory=list)
     uploaded_sources: list[dict[str, Any]] = Field(default_factory=list)
     citation_validation: dict[str, Any] = Field(default_factory=dict)
+    semantic_grounding: dict[str, Any] = Field(default_factory=dict)
     diagnostics: dict[str, Any] = Field(default_factory=dict)
+    reliability: dict[str, Any] | None = None

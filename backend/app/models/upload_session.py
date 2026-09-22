@@ -74,9 +74,3 @@ class UploadSession(Base):
         back_populates="session",
         cascade="all, delete-orphan",
     )
-
-    chat_history = relationship(
-        "ChatHistory",
-        back_populates="session",
-        cascade="all, delete-orphan",
-    )
