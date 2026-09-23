@@ -70,6 +70,7 @@ export default function Dashboard() {
   const [message, setMessage] = useState("");
 
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [recentAnalyses, setRecentAnalyses] = useState([]);
   const [attachedFiles, setAttachedFiles] = useState([]);
   const [uploadSessionId, setUploadSessionId] = useState(null);
@@ -201,13 +202,16 @@ export default function Dashboard() {
     }
 
     setUploading(true);
+    setUploadProgress(0);
 
     try {
       const email = localStorage.getItem("email");
 
       const response = await uploadFiles(
         email,
-        files
+        files,
+        null,
+        setUploadProgress
       );
 
       if (response.ignored_files?.length) {
@@ -227,6 +231,7 @@ export default function Dashboard() {
       alert("Upload failed.");
     } finally {
       setUploading(false);
+      setUploadProgress(0);
       event.target.value = "";
     }
   };
@@ -451,10 +456,11 @@ export default function Dashboard() {
                 <FaRegImage />
 
                 {uploading
-                  ? "Uploading..."
+                  ? `Uploading ${uploadProgress}%`
                   : "Upload"}
 
               </button>
+
 
               <button
                 className="clinical-send"

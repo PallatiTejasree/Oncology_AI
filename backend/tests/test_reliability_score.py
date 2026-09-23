@@ -14,6 +14,7 @@ class ReliabilityScoreTests(unittest.TestCase):
             "structured_answer": {"limitations": []},
         })
         self.assertGreaterEqual(result["score"], 70)
+        self.assertEqual(result["components"]["patient_document_support"], 100)
         self.assertFalse(result["calibrated"])
         self.assertIn("not diagnostic accuracy", result["explanation"])
 

@@ -32,11 +32,24 @@ def _document_support(result: dict[str, Any]) -> int:
     sources = result.get("uploaded_sources") or []
     if not sources:
         return 25
+    validation = result.get("citation_validation") or {}
+    uploaded_citations = {
+        citation for citation in (validation.get("used") or [])
+        if re.fullmatch(r"U\d+", str(citation))
+    }
+    invalid_uploaded = {
+        citation for citation in (validation.get("invalid") or [])
+        if re.fullmatch(r"U\d+", str(citation))
+    }
+    if uploaded_citations and not invalid_uploaded:
+        # One uploaded patient document is sufficient to establish the source
+        # for the answer. Citation count must not penalize a complete report.
+        return 100
     content = json.dumps(
         [result.get("summary"), result.get("structured_answer")], ensure_ascii=False
     )
-    uploaded_citations = set(re.findall(r"\bU\d+\b", content))
-    return _clamp(55 + 15 * min(len(uploaded_citations), 3))
+    inline_citations = set(re.findall(r"\bU\d+\b", content))
+    return _clamp(55 + 15 * min(len(inline_citations), 3))
 
 
 def _retrieval_support(result: dict[str, Any]) -> int:

@@ -3,7 +3,7 @@ import API from "./api";
 /**
  * Upload one or more medical files
  */
-export const uploadFiles = async (email, files, sessionId = null) => {
+export const uploadFiles = async (email, files, sessionId = null, onProgress = null) => {
   try {
     const formData = new FormData();
 
@@ -20,6 +20,13 @@ export const uploadFiles = async (email, files, sessionId = null) => {
       {
         headers: {
           "Content-Type": "multipart/form-data",
+        },
+        onUploadProgress: (event) => {
+          if (!onProgress || !event.total) return;
+          // Keep 100% reserved for the completed server response. The browser
+          // can finish sending bytes while the backend is still processing and
+          // indexing the medical files.
+          onProgress(Math.min(99, Math.round((event.loaded * 100) / event.total)));
         },
       }
     );

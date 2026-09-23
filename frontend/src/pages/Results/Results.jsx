@@ -311,6 +311,7 @@ export default function Results() {
   const [recentAnalyses, setRecentAnalyses] = useState([]);
   const [attachment, setAttachment] = useState(null);
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const followupFileRef = useRef(null);
   const initialRequestStarted = useRef(false);
 
@@ -378,13 +379,13 @@ export default function Results() {
   const attachAnotherFile = async (event) => {
     const files = Array.from(event.target.files || []);
     if (!files.length) return;
-    setUploading(true); setError("");
+    setUploading(true); setUploadProgress(0); setError("");
     try {
-      const response = await uploadFiles(localStorage.getItem("email"), files, activeSessionId);
+      const response = await uploadFiles(localStorage.getItem("email"), files, activeSessionId, setUploadProgress);
       const file = files[0];
       setAttachment({ sessionId: response.session_id, name: file.name, type: file.type, kind: file.type.startsWith("image/") ? "image" : "report", previewUrl: file.type.startsWith("image/") ? URL.createObjectURL(file) : null });
     } catch (requestError) { setError(requestError.response?.data?.detail || "Unable to upload file."); }
-    finally { setUploading(false); event.target.value = ""; }
+    finally { setUploading(false); setUploadProgress(0); event.target.value = ""; }
   };
 
   const removeFollowupAttachment = async () => {
@@ -504,6 +505,7 @@ export default function Results() {
         </div>
         <div className="chat-composer-dock">
           <form className="chat-followup" onSubmit={sendFollowUp}>
+            {uploading && <div className="upload-progress" role="status" aria-live="polite"><div className="upload-progress-label"><span>Uploading file</span><strong>{uploadProgress}%</strong></div><div className="upload-progress-track"><i style={{ width: `${uploadProgress}%` }} /></div></div>}
             {attachment && <div className="chat-attachment-preview">{attachment.previewUrl ? <img src={attachment.previewUrl} alt={`Preview of ${attachment.name}`} /> : <FaImage />}<span>{attachment.name}</span><button type="button" onClick={removeFollowupAttachment}><FaXmark /></button></div>}
             <textarea value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="Ask a follow-up about this report or image…" onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); sendFollowUp(event); } }} />
             <button className="chat-attach-button" type="button" disabled={uploading || Boolean(attachment)} onClick={() => followupFileRef.current?.click()} aria-label="Upload another file"><FaPaperclip /></button>

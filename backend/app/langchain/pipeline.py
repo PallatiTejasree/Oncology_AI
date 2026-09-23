@@ -1068,6 +1068,7 @@ class ClinicalAnalysisPipeline:
             summary_context,
             conversation_history or [],
             uploaded_sources or [],
+            image_paths=all_image_paths,
             brief_response=brief_response,
             focused_response=focused_response,
         )
@@ -1210,11 +1211,13 @@ class ClinicalAnalysisPipeline:
         evidence: list[dict[str, Any]],
         conversation_history: list[dict[str, str]] | None = None,
         uploaded_sources: list[dict[str, Any]] | None = None,
+        image_paths: list[str] | None = None,
         brief_response: bool = False,
         focused_response: bool = False,
     ) -> tuple[str, str, dict[str, Any] | None]:
         """Generate one of three explicit contracts with non-blocking repairs."""
         uploaded_sources = uploaded_sources or []
+        image_paths = image_paths or []
         request_type = "general" if brief_response else "focused" if focused_response else "full_report"
         model = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
         diagnostics: dict[str, Any] = {
@@ -1404,7 +1407,7 @@ class ClinicalAnalysisPipeline:
                 contract = prompt_template("GENERAL_CONTRACT")
             elif request_type == "focused":
                 schema = _FOCUSED_RESPONSE_SCHEMA
-                image_only_request = bool(all_image_paths) and not any(
+                image_only_request = bool(image_paths) and not any(
                     source.get("source_type") == "uploaded_report"
                     for source in uploaded_sources
                 )

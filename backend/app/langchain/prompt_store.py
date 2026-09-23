@@ -9,6 +9,7 @@ from functools import lru_cache
 from pathlib import Path
 
 _DEFAULT_PROMPT_DIRECTORY = Path(__file__).resolve().parents[3] / "prompts"
+_DEFAULT_MASTER_PROMPT = _DEFAULT_PROMPT_DIRECTORY / "oncology_ai_master_prompt.md"
 _FRONTMATTER = re.compile(r"\A---\s*\n(.*?)\n---\s*\n(.*)\Z", re.S)
 _VALID_ID = re.compile(r"^[A-Z][A-Z0-9_]*$")
 
@@ -51,10 +52,41 @@ def _parse_prompt(path: Path) -> PromptDefinition:
     return PromptDefinition(prompt_id, version, purpose, template, path)
 
 
+def _parse_master_prompt(path: Path) -> dict[str, PromptDefinition]:
+    raw = path.read_text(encoding="utf-8")
+    sections = re.split(r"(?m)^## ([A-Z][A-Z0-9_]*)\s*$", raw)
+    registry: dict[str, PromptDefinition] = {}
+    for index in range(1, len(sections), 2):
+        prompt_id = sections[index]
+        body = sections[index + 1].strip()
+        lines = body.splitlines()
+        metadata: dict[str, str] = {}
+        while lines and (not lines[0].strip() or ":" in lines[0] and not lines[0].startswith(("Return", "Repair"))):
+            line = lines.pop(0)
+            key, separator, value = line.partition(":")
+            if separator and key.strip() in {"version", "purpose"}:
+                metadata[key.strip()] = value.strip()
+            elif line.strip():
+                lines.insert(0, line)
+                break
+        template = "\n".join(lines).strip()
+        if not metadata.get("version") or not metadata.get("purpose") or not template:
+            raise PromptDocumentError(f"Incomplete master prompt section: {prompt_id}")
+        if prompt_id in registry:
+            raise PromptDocumentError(f"Duplicate prompt ID: {prompt_id}")
+        registry[prompt_id] = PromptDefinition(prompt_id, metadata["version"], metadata["purpose"], template, path)
+    if not registry:
+        raise PromptDocumentError(f"No prompt sections found in {path}")
+    return registry
+
+
 @lru_cache(maxsize=4)
 def load_prompt_registry(path: str | None = None) -> dict[str, PromptDefinition]:
     """Return a stable prompt-ID registry assembled from Markdown files."""
-    directory = Path(path or os.getenv("ONCOLOGY_PROMPT_DIRECTORY", _DEFAULT_PROMPT_DIRECTORY))
+    configured = path or os.getenv("ONCOLOGY_PROMPT_DIRECTORY")
+    if configured is None and _DEFAULT_MASTER_PROMPT.is_file():
+        return _parse_master_prompt(_DEFAULT_MASTER_PROMPT)
+    directory = Path(configured or _DEFAULT_PROMPT_DIRECTORY)
     if not directory.is_dir():
         raise PromptDocumentError(f"Prompt directory not found: {directory}")
     registry: dict[str, PromptDefinition] = {}
