@@ -233,10 +233,20 @@ def extract_report(path: Path) -> ProcessedReport:
             "We could not find readable text in this PDF, even after text recognition. Please upload a clearer "
             "scan or a searchable PDF exported directly from the reporting system."
         )
-    chunks = [
-        {"chunk_index": index, "text": chunk}
-        for index, chunk in enumerate(chunk_medical_text(combined), start=1)
-    ]
+    chunks = []
+    for index, chunk in enumerate(chunk_medical_text(combined), start=1):
+        pages = [int(value) for value in re.findall(r"\[Page\s+(\d+)\]", chunk, re.I)]
+        sections = re.findall(
+            r"(?im)^\s*(?:section\s*:\s*|#{1,3}\s*)?([A-Z][A-Za-z][A-Za-z /&-]{2,60})\s*:?\s*$",
+            chunk,
+        )
+        chunks.append({
+            "chunk_index": index,
+            "text": chunk,
+            "page_start": min(pages) if pages else None,
+            "page_end": max(pages) if pages else None,
+            "section_name": sections[0].strip() if sections else None,
+        })
     text_points = min(25.0, len(combined) / 1000 * 25.0)
     quality_score = round(min(100.0, 65.0 + text_points + (10.0 if chunks else 0.0)), 1)
     quality_reasons = [
@@ -413,6 +423,9 @@ def index_report(*, user_id: int, session_id: int, report_id: int, file_name: st
         "file_name": file_name,
         "file_sha256": sha256 or "unknown",
         "chunk_index": item["chunk_index"],
+        "page_start": item.get("page_start") or 0,
+        "page_end": item.get("page_end") or item.get("page_start") or 0,
+        "section_name": item.get("section_name") or "",
         "modality": "report_text",
     } for item in chunks]
     _collection(USER_TEXT_COLLECTION, "ip").upsert(

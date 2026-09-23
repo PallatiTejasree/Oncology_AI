@@ -99,6 +99,8 @@ def _uploaded_source_payload(reports, images, private_evidence: dict) -> list[di
                 values.append({
                     "origin": "private_retrieved_chunk", "chunk_id": item.get("id"),
                     "content": content, "source_type": item.get("source_type"),
+                    "section_name": item.get("section_name"),
+                    "page_start": item.get("page_start"), "page_end": item.get("page_end"),
                 })
 
     payload = []
@@ -114,7 +116,7 @@ def _uploaded_source_payload(reports, images, private_evidence: dict) -> list[di
             "mime_type": report.mime_type or "application/pdf",
             "content": extracted_text[:12000],
             "evidence_segments": [
-                {"origin": "original_extraction", "content": extracted_text[:12000]},
+                {"origin": "original_extraction", "content": extracted_text[:12000], "page_start": 1},
                 *excerpts,
             ],
         })

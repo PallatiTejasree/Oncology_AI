@@ -75,7 +75,8 @@ export function EvidenceSupport({ reliability }) {
     retrieval_support: "Retrieved evidence",
     citation_support: "Citation validation",
     evidence_agreement: "Evidence agreement",
-    completeness: "Completeness",
+    completeness: "Report coverage",
+    clinical_certainty: "Clinical certainty",
   };
   return (
     <section className="reliability-score" aria-label="Evidence support score">
@@ -113,6 +114,12 @@ function EvidenceList({ evidence = [], supportingImages = [], uploadedSources = 
                 <span>{item.modality === "image" ? "Image" : "Text"} · rank {item.rank || index + 1}</span>
               </div>
               {excerpt && <p>{excerpt.length > 260 ? `${excerpt.slice(0, 260)}…` : excerpt}</p>}
+              {(item.source_preview || item.section_name || item.page_start) && <details className="source-preview">
+                <summary>Source preview</summary>
+                {item.section_name && <span>Section: {item.section_name}</span>}
+                {item.page_start && <span>Page: {item.page_end && item.page_end !== item.page_start ? `${item.page_start}-${item.page_end}` : item.page_start}</span>}
+                {item.source_preview && <p>{item.source_preview}</p>}
+              </details>}
               <div className="evidence-meta">
                 {item.cancer_type && item.cancer_type !== "unknown" && <span>{item.cancer_type.replaceAll("_", " ")}</span>}
                 {item.source_dataset && <span>{item.source_dataset.replaceAll("_", " ")}</span>}
@@ -211,11 +218,29 @@ function CitationTags({ citations }) {
   return <span className="answer-citations">{items.map((citation, index) => <span key={`${citation}-${index}`}>{citation}</span>)}</span>;
 }
 
+function ClarificationPrompt({ result, onChoose }) {
+  if (!result?.clarification_required) return null;
+  return <section className="clarification-prompt" aria-label="Choose a follow-up question">
+    <h2>{result.clarification_question || "What would you like to know?"}</h2>
+    <div>{(result.clarification_options || []).map((option) => <button type="button" key={option} onClick={() => onChoose(option)}>{option}</button>)}</div>
+    <p>Choose a topic or write your own question below.</p>
+  </section>;
+}
+
+function DevelopmentDiagnostic({ diagnostic }) {
+  if (!diagnostic || diagnostic.status === "available") return null;
+  return <aside className="development-diagnostic" role="status"><strong>Development diagnostic</strong><span>Gemini fallback: {diagnostic.reason || diagnostic.status}{diagnostic.code ? ` (HTTP ${diagnostic.code})` : ""}</span></aside>;
+}
+
 function StructuredAnswer({ answer }) {
   if (!answer) return null;
   // Gemini's richer schema uses key_findings. Keep findings only for older
   // saved analyses and never render both sections as duplicates.
   const findings = asObjectArray((answer.key_findings?.length ? answer.key_findings : answer.findings));
+  const documentedFacts = asObjectArray(answer.documented_facts);
+  const aiInterpretation = asObjectArray(answer.ai_interpretation);
+  const missingInformation = asArray(answer.missing_information).map(displayText).filter(Boolean);
+  const clinicianQuestions = asArray(answer.clinician_questions).map(displayText).filter(Boolean);
   const limitations = asArray(answer.limitations).map(displayText).filter(Boolean);
   const medicalTerms = asObjectArray(answer.medical_terms);
   const supportClass = String(answer.evidence_support?.level || "limited").toLowerCase();
@@ -235,6 +260,22 @@ function StructuredAnswer({ answer }) {
         <h2>In simple terms</h2><p>{displayText(answer.plain_language_summary)}</p>
       </section>}
 
+      {documentedFacts.length > 0 && <section className="answer-section">
+        <h2>Documented facts</h2>
+        <div className="findings-table-wrap"><table className="findings-table"><tbody>{documentedFacts.map((item, index) => <tr key={`fact-${index}`}>
+          <th scope="row">{displayText(item.title)}<CitationTags citations={item.citations} /></th>
+          <td>{displayText(item.result)}</td><td>{displayText(item.meaning)}</td>
+        </tr>)}</tbody></table></div>
+      </section>}
+
+      {aiInterpretation.length > 0 && <section className="answer-section">
+        <h2>AI interpretation</h2>
+        <div className="findings-table-wrap"><table className="findings-table"><tbody>{aiInterpretation.map((item, index) => <tr key={`interpretation-${index}`}>
+          <th scope="row">{displayText(item.title)}<CitationTags citations={item.citations} /></th>
+          <td>{displayText(item.result)}</td><td>{displayText(item.meaning)}</td>
+        </tr>)}</tbody></table></div>
+      </section>}
+
       {findings.length > 0 && <section className="answer-section">
         <h2>Findings at a glance</h2>
         <div className="findings-table-wrap"><table className="findings-table">
@@ -246,17 +287,20 @@ function StructuredAnswer({ answer }) {
         </table></div>
       </section>}
 
-      {answer.staging && (answer.staging.documented_components?.length > 0 || answer.staging.unresolved_components?.length > 0 || answer.staging.final_stage || answer.staging.explanation) && <section className="answer-section">
-        <h2>Staging</h2>
-        {answer.staging.explanation && <p>{displayText(answer.staging.explanation)}</p>}
-        {answer.staging.final_stage && <p><strong>Documented stage:</strong> {displayText(answer.staging.final_stage)}</p>}
-        <CitationTags citations={answer.staging.citations} />
-      </section>}
-
       {limitations.length > 0 && <section className="answer-section">
         <h2>Important limitations</h2><div className="evidence-balance">
           <div>{limitations.map((item, index) => <p key={index}>! {item}</p>)}</div>
         </div>
+      </section>}
+
+      {missingInformation.length > 0 && <section className="answer-section">
+        <h2>Missing or pending information</h2>
+        <div className="evidence-balance"><div>{missingInformation.map((item, index) => <p key={index}>! {item}</p>)}</div></div>
+      </section>}
+
+      {clinicianQuestions.length > 0 && <section className="answer-section">
+        <h2>Questions for the treating clinician</h2>
+        <div className="evidence-balance"><div>{clinicianQuestions.map((item, index) => <p key={index}>? {item}</p>)}</div></div>
       </section>}
 
       {medicalTerms.length > 0 && <details className="medical-terms answer-section">
@@ -497,7 +541,7 @@ export default function Results() {
           {initialLoading && <article className="assistant-turn compact"><div className="assistant-avatar"><img src={oncologyLogo} alt="" /></div><div className="assistant-content"><ThinkingIndicator label="Reviewing your clinical material" /></div></article>}
           {result && <article className="assistant-turn">
             <div className="assistant-avatar"><img src={oncologyLogo} alt="Oncology AI" /></div>
-            <div className="assistant-content"><h1>{result.response_type === "conversation" ? "Oncology AI" : result.response_type === "rejection" ? "Upload needs attention" : "Answer"}</h1><GenerationStatus mode={result.generation_mode} diagnostics={result.generation_diagnostics} /><EvidenceSupport reliability={result.reliability} />{resultContract === "full_report" && <CaseComplexity review={result.case_complexity} />}{(resultContract === "full_report" || result.care_urgency?.level === "emergency") && <CareUrgency review={result.care_urgency} />}<ResponseContent contract={resultContract} structuredAnswer={result.structured_answer} summary={result.summary} />{resultContract === "full_report" && result.response_type !== "rejection" && ((result.evidence?.length || 0) + (result.supporting_image_evidence?.length || 0) + (result.uploaded_sources?.length || 0) > 0) && <details className="advanced-evidence"><summary>Show detailed evidence ({result.research_summary?.related_records || 0})</summary><EvidenceList evidence={result.evidence} supportingImages={result.supporting_image_evidence} uploadedSources={result.uploaded_sources} citationValidation={result.citation_validation} /></details>}</div>
+            <div className="assistant-content"><h1>{result.response_type === "conversation" ? "Oncology AI" : result.response_type === "rejection" ? "Upload needs attention" : "Answer"}</h1><GenerationStatus mode={result.generation_mode} diagnostics={result.generation_diagnostics} /><DevelopmentDiagnostic diagnostic={result.development_diagnostic} /><EvidenceSupport reliability={result.reliability} />{resultContract === "full_report" && <CaseComplexity review={result.case_complexity} />}{(resultContract === "full_report" || result.care_urgency?.level === "emergency") && <CareUrgency review={result.care_urgency} />}<ResponseContent contract={resultContract} structuredAnswer={result.structured_answer} summary={result.summary} /><ClarificationPrompt result={result} onChoose={setQuestion} />{resultContract === "full_report" && result.response_type !== "rejection" && ((result.evidence?.length || 0) + (result.supporting_image_evidence?.length || 0) + (result.uploaded_sources?.length || 0) > 0) && <details className="advanced-evidence"><summary>Show detailed evidence ({result.research_summary?.related_records || 0})</summary><EvidenceList evidence={result.evidence} supportingImages={result.supporting_image_evidence} uploadedSources={result.uploaded_sources} citationValidation={result.citation_validation} /></details>}</div>
           </article>}
           {turns.map((turn, index) => { const turnContract = inferResponseContract(turn.responseContract, turn.structuredAnswer); return <React.Fragment key={turn.id || `${turn.question}-${index}`}><article className="user-turn"><div><MessageAttachments files={turn.fileName ? [{ name: turn.fileName, previewUrl: turn.previewUrl, type: turn.fileType, kind: turn.fileKind }] : []} /><p>{turn.question}</p></div></article><article className={`assistant-turn compact ${turn.isError ? "assistant-notice" : ""}`}><div className="assistant-avatar"><img src={oncologyLogo} alt="Oncology AI" /></div><div className="assistant-content">{turn.pending ? <ThinkingIndicator label="Thinking" /> : <><GenerationStatus mode={turn.generationMode} diagnostics={turn.generationDiagnostics} /><EvidenceSupport reliability={turn.reliability} />{turnContract === "full_report" && <CaseComplexity review={turn.caseComplexity} />}{(turnContract === "full_report" || turn.careUrgency?.level === "emergency") && <CareUrgency review={turn.careUrgency} />}<ResponseContent contract={turnContract} structuredAnswer={turn.structuredAnswer} summary={turn.answer} />{turnContract === "full_report" && turn.responseType !== "rejection" && ((turn.evidence?.length || 0) + (turn.supportingImages?.length || 0) + (turn.uploadedSources?.length || 0) > 0) && <details className="advanced-evidence"><summary>Show detailed evidence</summary><EvidenceList evidence={turn.evidence} supportingImages={turn.supportingImages} uploadedSources={turn.uploadedSources} citationValidation={turn.citationValidation} /></details>}</>}</div></article></React.Fragment>; })}
           {error && <article className="assistant-turn compact assistant-notice"><div className="assistant-avatar"><img src={oncologyLogo} alt="Oncology AI" /></div><div className="assistant-content"><h2>Unable to complete the request</h2><p className="assistant-summary">{error}</p></div></article>}

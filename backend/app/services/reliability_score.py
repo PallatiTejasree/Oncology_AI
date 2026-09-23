@@ -13,6 +13,15 @@ _UNCERTAINTY = re.compile(
     re.I,
 )
 
+_REPORT_SECTIONS = {
+    "clinical_context": r"\b(?:history|symptom|age|sex|patient|presentation)\b",
+    "pathology": r"\b(?:pathology|biopsy|histolog|adenocarcinoma|carcinoma|tumou?r)\b",
+    "imaging": r"\b(?:imaging|radiolog|ct|mri|pet|scan|lesion|mass|nodule)\b",
+    "biomarkers_molecular": r"\b(?:biomarker|molecular|mutation|egfr|alk|pd[- ]?l1|ihc|immunohistochem)\b",
+    "nodes_and_spread": r"\b(?:lymph|node|metasta|distant|spread|brain|liver|bone)\b",
+    "limitations_pending": r"\b(?:pending|indeterminate|uncertain|not documented|limitation|further evaluation)\b",
+}
+
 
 def _clamp(value: float) -> int:
     return round(max(0.0, min(100.0, value)))
@@ -91,13 +100,21 @@ def _agreement(result: dict[str, Any]) -> int:
 
 
 def _completeness(result: dict[str, Any]) -> int:
-    structured = result.get("structured_answer") or {}
-    limitations = structured.get("limitations") or []
-    if isinstance(limitations, str):
-        limitations = [limitations]
-    text = " ".join(filter(None, [result.get("summary") or "", json.dumps(limitations)]))
+    source_text = json.dumps(result.get("uploaded_sources") or {}, ensure_ascii=False).lower()
+    answer_text = json.dumps(
+        [result.get("summary"), result.get("structured_answer")], ensure_ascii=False
+    ).lower()
+    applicable = [name for name, pattern in _REPORT_SECTIONS.items() if re.search(pattern, source_text)]
+    if not applicable:
+        return 100
+    covered = [name for name in applicable if re.search(_REPORT_SECTIONS[name], answer_text)]
+    return _clamp(100 * len(covered) / len(applicable))
+
+
+def _clinical_certainty(result: dict[str, Any]) -> int:
+    text = " ".join(filter(None, [result.get("summary") or "", json.dumps(result.get("structured_answer") or {})]))
     uncertainty_count = len(_UNCERTAINTY.findall(text))
-    return _clamp(90 - min(45, len(limitations) * 8 + uncertainty_count * 5))
+    return _clamp(100 - min(60, uncertainty_count * 8))
 
 
 def calculate_reliability(result: dict[str, Any]) -> dict[str, Any] | None:
@@ -113,6 +130,7 @@ def calculate_reliability(result: dict[str, Any]) -> dict[str, Any] | None:
         "citation_support": _citation_support(result),
         "evidence_agreement": _agreement(result),
         "completeness": _completeness(result),
+        "clinical_certainty": _clinical_certainty(result),
     }
     score = _clamp(
         components["patient_document_support"] * 0.35
@@ -138,7 +156,9 @@ def calculate_reliability(result: dict[str, Any]) -> dict[str, Any] | None:
         else "Citation support is missing or limited."
     )
     if components["completeness"] < 70:
-        reasons.append("Some information remains missing or uncertain.")
+        reasons.append("Some report sections were not covered in the answer.")
+    if components["clinical_certainty"] < 70:
+        reasons.append("Clinical certainty is reduced by documented uncertainty; this is separate from report coverage.")
     return {
         "score": score,
         "label": _label(score),

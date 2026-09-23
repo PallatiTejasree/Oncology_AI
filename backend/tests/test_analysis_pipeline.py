@@ -56,6 +56,10 @@ class _FakeMultimodalRetrieval:
 
 
 class ClinicalAnalysisPipelineTests(unittest.TestCase):
+    def test_empty_question_with_uploaded_material_uses_full_report_contract(self):
+        self.assertEqual(_request_contract("", has_uploaded_sources=True), "full_report")
+        self.assertEqual(_request_contract("", has_uploaded_sources=False, has_images=True), "full_report")
+
     def test_all_specific_report_questions_use_the_same_focused_contract(self):
         questions = (
             "What is my EGFR result?",
@@ -254,7 +258,7 @@ class ClinicalAnalysisPipelineTests(unittest.TestCase):
         with patch.dict(os.environ, {"GEMINI_API_KEY": "test-key"}, clear=True), patch.dict(sys.modules, {"google": fake_google}):
             _, _, structured = pipeline._summarize("Explain the full report", [], [], uploaded)
         self.assertEqual(pipeline.last_generation_metadata["generation_mode"], "gemini_degraded")
-        self.assertEqual(set(structured), {"headline", "plain_language_summary", "case_complexity", "evidence_support", "key_findings", "staging", "limitations", "medical_terms", "safety_notice"})
+        self.assertEqual(set(structured), {"headline", "plain_language_summary", "case_complexity", "evidence_support", "documented_facts", "ai_interpretation", "missing_information", "clinician_questions", "key_findings", "staging", "limitations", "medical_terms", "safety_notice"})
         self.assertEqual(structured["key_findings"], [])
         self.assertFalse(structured["staging"]["can_assign_final_stage"])
 
@@ -439,7 +443,7 @@ class ClinicalAnalysisPipelineTests(unittest.TestCase):
                 }],
                 top_k=5,
             )
-        self.assertEqual(result["response_contract"], "focused")
+        self.assertEqual(result["response_contract"], "full_report")
         self.assertTrue(result["structured_answer"])
 
     def test_gemini_failure_returns_useful_extractive_report_findings(self):

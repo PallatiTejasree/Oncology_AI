@@ -130,6 +130,10 @@ _ANSWER_RESPONSE_SCHEMA = {
             },
             "required": ["level", "explanation"],
         },
+        "documented_facts": {"type": "array", "items": {"type": "object"}},
+        "ai_interpretation": {"type": "array", "items": {"type": "object"}},
+        "missing_information": {"type": "array", "items": {"type": "string"}},
+        "clinician_questions": {"type": "array", "items": {"type": "string"}},
         "key_findings": {
             "type": "array",
             "items": {
@@ -167,7 +171,7 @@ _ANSWER_RESPONSE_SCHEMA = {
         },
         "safety_notice": {"type": "string"},
     },
-    "required": ["headline", "plain_language_summary", "case_complexity", "evidence_support", "key_findings", "staging", "limitations", "medical_terms", "safety_notice"],
+    "required": ["headline", "plain_language_summary", "case_complexity", "evidence_support", "documented_facts", "ai_interpretation", "missing_information", "clinician_questions", "key_findings", "staging", "limitations", "medical_terms", "safety_notice"],
 }
 
 
@@ -257,6 +261,8 @@ _GENERAL_ONCOLOGY_REQUEST = re.compile(
 
 def _request_contract(question: str, *, has_uploaded_sources: bool, has_images: bool = False) -> str:
     """Select a task-level contract without keyword-specific medical prompts."""
+    if not question.strip() and (has_uploaded_sources or has_images):
+        return "full_report"
     if _FULL_REPORT_REQUEST.search(question):
         return "full_report"
     if _SYMPTOM_REQUEST.search(question):
@@ -349,7 +355,14 @@ def _uploaded_evidence_chunks(
                     "chunk_id": segment.get("chunk_id"),
                     "relevance": sum(term in key for term in question_terms),
                 })
-    candidates.sort(key=lambda item: (item["relevance"], item["category"] in preferred, item["strength"], -item["order"]), reverse=True)
+    category_priority = {
+        "pathology-confirmed": 5, "lymph-node-pathology": 4,
+        "immunohistochemistry": 3, "molecular": 2, "imaging": 1,
+    }
+    candidates.sort(key=lambda item: (
+        item["relevance"], item["category"] in preferred,
+        category_priority.get(item["category"], 0), item["strength"], -item["order"],
+    ), reverse=True)
     selected: list[dict[str, Any]] = []
     signatures: list[set[str]] = []
     for item in candidates:
@@ -726,6 +739,10 @@ def _evidence_item(result: dict[str, Any]) -> dict[str, Any]:
         "rank": result.get("fused_rank") or result.get("rank"),
         "modality": result.get("modality"),
         "text": result.get("document") or "",
+        "source_preview": " ".join(str(result.get("document") or "").split())[:600],
+        "section_name": metadata.get("section_name") or metadata.get("section"),
+        "page_start": metadata.get("page_start") or metadata.get("page_number"),
+        "page_end": metadata.get("page_end") or metadata.get("page_number"),
         "source_dataset": metadata.get("source_dataset"),
         "cancer_type": metadata.get("cancer_type"),
         "file_name": metadata.get("file_name") or metadata.get("image_name"),
@@ -835,6 +852,26 @@ def _as_list(value: Any) -> list[Any]:
     return [] if value is None or value == "" else [value]
 
 
+def _clarification_options(uploaded_sources: list[dict[str, Any]] | None, summary: str = "") -> list[str]:
+    """Return stable core options plus options relevant to uploaded material."""
+    source_text = " ".join(
+        f"{source.get('file_name', '')} {source.get('source_type', '')} {source.get('content', '')}"
+        for source in (uploaded_sources or [])
+    ).lower()
+    source_text = f"{source_text} {summary.lower()}"
+    options = ["Diagnosis", "Pathology", "Treatment", "Staging"]
+    conditional = (
+        ("Biomarkers", r"biomarker|molecular|egfr|alk|ros1|pd-l1|ihc|immunohistochem|mutation"),
+        ("Imaging findings", r"imaging|radiology|radiologic|mri|ct scan|pet|scan|lesion|nodule"),
+        ("Lymph nodes", r"lymph node|lymph nodes|nodal|adenopathy"),
+        ("Treatment response", r"treatment response|therapy response|chemotherapy|immunotherapy|radiation|targeted therapy|response"),
+    )
+    for label, pattern in conditional:
+        if re.search(pattern, source_text, re.I):
+            options.append(label)
+    return options
+
+
 def _normalize_structured_answer(
     value: Any, uploaded_count: int | None = None, reference_count: int | None = None,
 ) -> dict[str, Any]:
@@ -874,6 +911,32 @@ def _normalize_structured_answer(
             "citations": citations,
         })
     normalized["key_findings"] = valid_findings
+    def normalize_claims(raw: Any) -> list[dict[str, Any]]:
+        claims = []
+        for item in _as_list(raw):
+            if not isinstance(item, dict) or not str(item.get("title") or item.get("finding") or "").strip():
+                continue
+            citations = item.get("citations")
+            citations = re.findall(r"U\d+", citations) if isinstance(citations, str) else _as_list(citations)
+            citations = [str(c) for c in citations if re.fullmatch(r"U\d+", str(c))]
+            if uploaded_count is not None:
+                citations = [c for c in citations if int(c[1:]) <= uploaded_count]
+            # Patient-specific documented claims must be traceable to uploaded evidence.
+            if uploaded_count and not citations:
+                continue
+            claims.append({
+                "title": str(item.get("title") or item.get("finding")).strip(),
+                "result": str(item.get("result") or "").strip(),
+                "meaning": str(item.get("meaning") or "").strip(),
+                "certainty": str(item.get("certainty") or "insufficient_information") if str(item.get("certainty") or "insufficient_information") in _CERTAINTIES else "insufficient_information",
+                "importance": str(item.get("importance") or "supporting") if str(item.get("importance") or "supporting") in {"critical", "high", "supporting"} else "supporting",
+                "citations": citations,
+            })
+        return claims
+    normalized["documented_facts"] = normalize_claims(normalized.get("documented_facts"))
+    normalized["ai_interpretation"] = normalize_claims(normalized.get("ai_interpretation"))
+    normalized["missing_information"] = [str(item) for item in _as_list(normalized.get("missing_information")) if str(item).strip()]
+    normalized["clinician_questions"] = [str(item) for item in _as_list(normalized.get("clinician_questions")) if str(item).strip()]
     for obsolete in ("findings", "reasoning", "supports", "primary_interpretation", "confirmed_findings", "favored_findings", "suspicious_findings", "indeterminate_findings", "important_negative_findings", "biomarkers_and_molecular_results", "subheadline"):
         normalized.pop(obsolete, None)
     support = normalized.get("evidence_support")
@@ -1111,6 +1174,21 @@ class ClinicalAnalysisPipeline:
             )
         }
         public_generation_diagnostics["status"] = generation_metadata.get("generation_status")
+        clarification_required = bool(
+            focused_response
+            and structured_answer
+            and (
+                str(structured_answer.get("certainty") or "") == "insufficient_information"
+                or "not documented" in summary.lower()
+            )
+        )
+        development_diagnostic = None
+        if os.getenv("APP_ENV", "development").lower() != "production" and generation_metadata.get("generation_status") == "extractive_fallback":
+            development_diagnostic = {
+                "status": generation_metadata.get("provider_status"),
+                "code": generation_metadata.get("provider_error_code"),
+                "reason": generation_metadata.get("fallback_reason"),
+            }
         response = {
             "query_type": retrieval["query_type"],
             "summary": summary,
@@ -1137,6 +1215,10 @@ class ClinicalAnalysisPipeline:
             "repair_succeeded": self.last_generation_metadata.get("answer_repair_succeeded"),
             "structured_answer_present": structured_answer is not None,
             "generation_diagnostics": public_generation_diagnostics,
+            "clarification_required": clarification_required,
+            "clarification_question": "What would you like to know about this document?" if clarification_required else None,
+            "clarification_options": _clarification_options(uploaded_sources, summary) if clarification_required else [],
+            "development_diagnostic": development_diagnostic,
             "evidence": evidence,
             "supporting_image_evidence": supporting_images,
             "diagnostics": {

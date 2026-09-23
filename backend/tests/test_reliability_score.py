@@ -21,7 +21,7 @@ class ReliabilityScoreTests(unittest.TestCase):
     def test_non_analysis_response_has_no_score(self):
         self.assertIsNone(calculate_reliability({"response_type": "conversation"}))
 
-    def test_uncertainty_reduces_completeness(self):
+    def test_uncertainty_does_not_reduce_report_coverage(self):
         base = {
             "uploaded_sources": [{"file_name": "report.pdf"}],
             "evidence": [{"modality": "text"}],
@@ -29,7 +29,8 @@ class ReliabilityScoreTests(unittest.TestCase):
         }
         clear = calculate_reliability({**base, "summary": "Confirmed finding [U1]."})
         uncertain = calculate_reliability({**base, "summary": "Possible finding; cannot exclude disease [U1].", "structured_answer": {"limitations": ["Test pending"]}})
-        self.assertLess(uncertain["components"]["completeness"], clear["components"]["completeness"])
+        self.assertEqual(uncertain["components"]["completeness"], clear["components"]["completeness"])
+        self.assertLess(uncertain["components"]["clinical_certainty"], clear["components"]["clinical_certainty"])
 
 
 if __name__ == "__main__":

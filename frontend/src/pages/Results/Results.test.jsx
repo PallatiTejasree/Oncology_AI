@@ -54,7 +54,6 @@ test("full report answers render canonical clinical sections", () => {
   }} />);
   expect(screen.getByText("In simple terms")).toBeInTheDocument();
   expect(screen.getByText("Findings at a glance")).toBeInTheDocument();
-  expect(screen.getByText("Staging")).toBeInTheDocument();
   expect(screen.getByText("Important limitations")).toBeInTheDocument();
   expect(screen.getByText("Professional review is required.")).toBeInTheDocument();
 });

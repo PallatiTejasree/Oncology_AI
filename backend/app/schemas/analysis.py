@@ -70,6 +70,10 @@ class FullReportAnswer(BaseModel):
     plain_language_summary: str
     case_complexity: CaseComplexity
     evidence_support: EvidenceSupport
+    documented_facts: list[KeyFinding] = Field(default_factory=list)
+    ai_interpretation: list[KeyFinding] = Field(default_factory=list)
+    missing_information: list[str] = Field(default_factory=list)
+    clinician_questions: list[str] = Field(default_factory=list)
     key_findings: list[KeyFinding] = Field(default_factory=list)
     staging: Staging
     limitations: list[str] = Field(default_factory=list)
@@ -93,3 +97,7 @@ class AnalysisResponseContract(BaseModel):
     semantic_grounding: dict[str, Any] = Field(default_factory=dict)
     diagnostics: dict[str, Any] = Field(default_factory=dict)
     reliability: dict[str, Any] | None = None
+    clarification_required: bool = False
+    clarification_question: str | None = None
+    clarification_options: list[str] = Field(default_factory=list)
+    development_diagnostic: dict[str, Any] | None = None
